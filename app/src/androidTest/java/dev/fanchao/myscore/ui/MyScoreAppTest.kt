@@ -7,6 +7,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
+import androidx.test.espresso.Espresso.pressBack
 import dev.fanchao.myscore.LibraryUiState
 import dev.fanchao.myscore.data.ScoreDocument
 import dev.fanchao.myscore.data.DownloadedScore
@@ -129,6 +130,39 @@ class MyScoreAppTest {
         composeRule.onNodeWithText("New score.pdf downloaded").assertIsDisplayed()
         composeRule.onNodeWithText("Open").performClick()
         composeRule.runOnIdle { assertEquals(score, opened) }
+    }
+
+    @Test
+    fun backFromTopLevelDestinationReturnsToScores() {
+        composeRule.setContent {
+            MyScoreTheme {
+                MyScoreApp(
+                    libraryUri = null,
+                    libraryState = LibraryUiState(),
+                    onChooseFolder = {},
+                    onImportPdf = {},
+                    onDownloadPdf = { _, _, _, _, _ -> },
+                    onOpenDownloadedScore = {},
+                    onRefresh = {},
+                    onOpenScore = {},
+                    onOpenDirectory = {},
+                    onNavigateUp = {},
+                    onNavigateToPath = {},
+                    onCopy = {},
+                    onMove = {},
+                    onPaste = {},
+                    onClearClipboard = {},
+                    onCreateFolder = {},
+                    onRename = { _, _ -> },
+                    onDelete = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithText("Score library").assertIsDisplayed()
+        pressBack()
+        composeRule.onNodeWithText("Choose your score folder").assertIsDisplayed()
     }
 
     @Test

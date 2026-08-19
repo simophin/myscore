@@ -95,7 +95,9 @@ fun PdfViewer(
     var layoutMenuExpanded by remember { mutableStateOf(false) }
     var anchorPage by remember(score.uri) { mutableIntStateOf(initialPage) }
     ImmersiveSystemBars(fullScreen)
-    BackHandler(enabled = fullScreen) { fullScreen = false }
+    BackHandler {
+        if (fullScreen) fullScreen = false else onBack()
+    }
 
     DisposableEffect(documentUri) {
         runCatching {

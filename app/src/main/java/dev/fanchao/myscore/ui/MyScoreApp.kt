@@ -54,6 +54,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -98,7 +99,10 @@ fun MyScoreApp(
     onRename: (LibraryEntry, String) -> Unit,
     onDelete: (LibraryEntry) -> Unit,
 ) {
-    var selectedTab by remember { mutableStateOf(AppTab.Scores) }
+    var selectedTab by rememberSaveable { mutableStateOf(AppTab.Scores) }
+    BackHandler(enabled = selectedTab != AppTab.Scores) {
+        selectedTab = AppTab.Scores
+    }
     val containerSize = LocalWindowInfo.current.containerSize
     val useRail = shouldUseNavigationRail(containerSize.width, containerSize.height)
     Row(Modifier.fillMaxSize()) {
@@ -470,7 +474,14 @@ private fun FindScreen(
 ) {
     var query by remember { mutableStateOf("") }
     var webView by remember { mutableStateOf<android.webkit.WebView?>(null) }
+    var canNavigateBack by remember { mutableStateOf(false) }
     var controlsVisible by remember { mutableStateOf(true) }
+    BackHandler(enabled = canNavigateBack) {
+        webView?.let { view ->
+            if (view.canGoBack()) view.goBack()
+            canNavigateBack = view.canGoBack()
+        }
+    }
     val searchUrl = {
         val encoded = URLEncoder.encode(query.trim(), StandardCharsets.UTF_8.toString())
         "https://imslp.org/index.php?search=$encoded&title=Special%3ASearch&go=Go"
@@ -534,7 +545,11 @@ private fun FindScreen(
         }
         ImslpWebView(
             modifier = Modifier.fillMaxWidth().weight(1f),
-            onReady = { webView = it },
+            onReady = {
+                webView = it
+                canNavigateBack = it.canGoBack()
+            },
+            onHistoryChanged = { canNavigateBack = it },
             onDownload = onDownloadPdf,
             onScrollDirectionChanged = { scrollingDown -> controlsVisible = !scrollingDown },
         )
@@ -546,6 +561,7 @@ private fun FindScreen(
 private fun ImslpWebView(
     modifier: Modifier,
     onReady: (android.webkit.WebView) -> Unit,
+    onHistoryChanged: (canGoBack: Boolean) -> Unit,
     onDownload: (String, String?, String?, String?, String?) -> Unit,
     onScrollDirectionChanged: (scrollingDown: Boolean) -> Unit,
 ) {
@@ -561,6 +577,15 @@ private fun ImslpWebView(
                 settings.setSupportMultipleWindows(false)
                 settings.javaScriptCanOpenWindowsAutomatically = false
                 webViewClient = object : android.webkit.WebViewClient() {
+                    override fun doUpdateVisitedHistory(
+                        view: android.webkit.WebView,
+                        url: String?,
+                        isReload: Boolean,
+                    ) {
+                        super.doUpdateVisitedHistory(view, url, isReload)
+                        onHistoryChanged(view.canGoBack())
+                    }
+
                     override fun shouldOverrideUrlLoading(
                         view: android.webkit.WebView,
                         request: android.webkit.WebResourceRequest,

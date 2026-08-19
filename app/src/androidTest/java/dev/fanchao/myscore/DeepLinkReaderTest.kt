@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
+import androidx.test.espresso.Espresso.pressBack
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import org.junit.Rule
 import org.junit.Test
@@ -54,8 +55,11 @@ class DeepLinkReaderTest {
             scenario.recreate()
             composeRule.onNodeWithContentDescription("Page layout: Single page").assertIsDisplayed()
             composeRule.onNodeWithContentDescription("Enter full screen").performClick()
-            composeRule.onNodeWithContentDescription("Exit full screen").assertIsDisplayed().performClick()
+            composeRule.onNodeWithContentDescription("Exit full screen").assertIsDisplayed()
+            pressBack()
             composeRule.onNodeWithText("Deep Link Score").assertIsDisplayed()
+            pressBack()
+            composeRule.onNodeWithText("MyScore").assertIsDisplayed()
         } finally {
             scenario.close()
             runBlocking {
