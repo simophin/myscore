@@ -1,6 +1,7 @@
 package dev.fanchao.myscore.ui
 
 import android.annotation.SuppressLint
+import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.clickable
@@ -45,6 +46,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -99,6 +101,10 @@ fun MyScoreApp(
     var creatingFolder by rememberSaveable { mutableStateOf(false) }
     var scoreActionsExpanded by remember { mutableStateOf(false) }
     var findSearchVisible by rememberSaveable { mutableStateOf(false) }
+    val findWebViewHolder = remember { ImslpWebViewHolder() }
+    DisposableEffect(findWebViewHolder) {
+        onDispose(findWebViewHolder::destroy)
+    }
     BackHandler(enabled = selectedTab != AppTab.Scores) {
         selectedTab = AppTab.Scores
     }
@@ -238,6 +244,7 @@ fun MyScoreApp(
                 )
                 AppTab.Find -> FindScreen(
                     modifier = Modifier.padding(padding),
+                    webViewHolder = findWebViewHolder,
                     hasLibrary = libraryUri != null,
                     state = libraryState,
                     onDownloadPdf = onDownloadPdf,
@@ -503,6 +510,7 @@ private fun LibraryEntry.toScoreDocument() = ScoreDocument(
 @Composable
 private fun FindScreen(
     modifier: Modifier,
+    webViewHolder: ImslpWebViewHolder,
     hasLibrary: Boolean,
     state: LibraryUiState,
     onDownloadPdf: (String, String?, String?, String?, String?) -> Unit,
@@ -555,6 +563,7 @@ private fun FindScreen(
         }
         ImslpWebView(
             modifier = Modifier.fillMaxWidth().weight(1f),
+            holder = webViewHolder,
             onReady = {
                 webView = it
                 canNavigateBack = it.canGoBack()
@@ -591,6 +600,7 @@ private fun FindScreen(
 @SuppressLint("SetJavaScriptEnabled") // IMSLP's interactive download flow requires JavaScript.
 private fun ImslpWebView(
     modifier: Modifier,
+    holder: ImslpWebViewHolder,
     onReady: (android.webkit.WebView) -> Unit,
     onHistoryChanged: (canGoBack: Boolean) -> Unit,
     onDownload: (String, String?, String?, String?, String?) -> Unit,
@@ -598,7 +608,7 @@ private fun ImslpWebView(
     AndroidView(
         modifier = modifier,
         factory = { context ->
-            android.webkit.WebView(context).apply {
+            holder.obtain(context) {
                 settings.javaScriptEnabled = true
                 settings.domStorageEnabled = true
                 settings.allowFileAccess = false
@@ -637,16 +647,37 @@ private fun ImslpWebView(
                     val cookies = android.webkit.CookieManager.getInstance().getCookie(url)
                     onDownload(url, userAgent, contentDisposition, mimeType, cookies)
                 }
-                loadUrl("https://imslp.org/")
                 onReady(this)
             }
         },
         onRelease = { view ->
-            view.stopLoading()
             view.setDownloadListener(null)
-            view.destroy()
         },
     )
+}
+
+private class ImslpWebViewHolder {
+    private var webView: android.webkit.WebView? = null
+
+    fun obtain(
+        context: Context,
+        configure: android.webkit.WebView.() -> Unit,
+    ): android.webkit.WebView {
+        webView?.let { return it.apply(configure) }
+        return android.webkit.WebView(context).apply {
+            configure()
+            loadUrl("https://imslp.org/")
+        }.also { webView = it }
+    }
+
+    fun destroy() {
+        webView?.run {
+            stopLoading()
+            setDownloadListener(null)
+            destroy()
+        }
+        webView = null
+    }
 }
 
 @Composable
