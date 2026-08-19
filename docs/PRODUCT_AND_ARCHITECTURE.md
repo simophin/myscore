@@ -16,7 +16,7 @@ The first milestone is a working local-first reader. Annotation, set lists, meta
 
 ### Storage
 
-The library is a directory selected with Android's Storage Access Framework (`ACTION_OPEN_DOCUMENT_TREE`). The app persists the URI grant and stores only that URI in Preferences DataStore. This avoids the broad `MANAGE_EXTERNAL_STORAGE` permission, works with local and compatible cloud document providers, and leaves scores accessible after uninstall.
+The library is a directory selected with Android's Storage Access Framework (`ACTION_OPEN_DOCUMENT_TREE`). The app persists the URI grant and stores only that URI in its Room database. This avoids the broad `MANAGE_EXTERNAL_STORAGE` permission, works with local and compatible cloud document providers, and leaves scores accessible after uninstall.
 
 The Scores browser exposes only folders and PDFs. Navigation begins at the granted tree and every directory and mutation is validated by the repository as a descendant of that root, so the browser cannot navigate or operate outside it. Breadcrumbs and system Back provide hierarchy navigation. Imports use `DocumentFile.createFile()` so downloads land in the selected library regardless of the underlying provider.
 
@@ -26,7 +26,7 @@ Files and folders have copy, move, and delete actions. Copy/move use a visible c
 
 The reader uses the platform `PdfRenderer`, not a WebView or an unmaintained third-party PDF SDK. Pages are rendered off the main thread and only around the visible horizontal pager position. It supports horizontal page turns, pinch zoom/pan, and double-tap zoom. Annotation is explicitly out of scope. While the reader is visible it applies Compose's `keepScreenOn` modifier; Android may sleep normally as soon as the reader leaves composition.
 
-Page layout is a per-document preference with three values: **Auto** (the default), **Single page**, and **Two pages**. Auto uses paired pages when the PDF content composable itself measures at least 840dp wide; it does not read device or physical screen width. Explicit Single and Two choices override that breakpoint at every measured width, and are stored under the same stable document-URI hash scheme as reader position. A layout change rebuilds the pager around its canonical visible PDF page, preventing unrelated position jumps. Copies have independent preferences; moves retain preferences when their document provider preserves document identity.
+Page layout is a per-document preference with three values: **Auto** (the default), **Single page**, and **Two pages**. Auto uses paired pages when the PDF content composable itself measures at least 840dp wide; it does not read device or physical screen width. Explicit Single and Two choices override that breakpoint at every measured width, and are stored with reader position in the URI-keyed preferences table. A layout change rebuilds the pager around its canonical visible PDF page, preventing unrelated position jumps. Copies have independent preferences; moves retain preferences when their document provider preserves document identity.
 
 The last settled page is persisted per document. The last-opened document URI is also persisted: on a cold start, MyScore reopens it at that page when it is still present in the configured library. If it has moved, been deleted, or lost permission, startup falls back to the gallery. The app accepts PDF `ACTION_VIEW` intents and `myscore://open?uri=<encoded-content-uri>` deep links. A caller must still grant access to a content URI; a deep link cannot bypass Android's URI permission model.
 
@@ -65,7 +65,7 @@ Mutopia is an excellent public-domain score source but does not expose a documen
 - `compileSdk` and `targetSdk` 37, `minSdk` 23
 - Stable Compose BOM 2026.06.01 and Material 3
 - Lifecycle-aware state collection, ViewModel-owned state, coroutines for I/O
-- Preferences DataStore for the one persisted setting
+- Room database with a generic `configs` table and a dedicated `uri_preferences` table
 - No dependency-injection framework yet; the app is too small to justify one
 
 The code is grouped by responsibility (`data`, `ui`, `ui/theme`). Repositories isolate storage from UI, leaving room to split into feature modules only if the codebase grows enough to benefit.
