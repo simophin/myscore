@@ -97,7 +97,9 @@ class MainActivity : ComponentActivity() {
                         LaunchedEffect(score.uri) { viewModel.recordOpenedScore(score.uri) }
                         val rememberedPage by viewModel.readerPage(score.uri)
                             .collectAsStateWithLifecycle(initialValue = -1)
-                        if (rememberedPage < 0) {
+                        val pageLayout by viewModel.readerLayout(score.uri)
+                            .collectAsStateWithLifecycle(initialValue = null)
+                        if (rememberedPage < 0 || pageLayout == null) {
                             androidx.compose.material3.CircularProgressIndicator(
                                 Modifier.align(androidx.compose.ui.Alignment.Center),
                             )
@@ -105,7 +107,9 @@ class MainActivity : ComponentActivity() {
                             PdfViewer(
                                 score = score,
                                 initialPage = rememberedPage,
+                                layoutPreference = requireNotNull(pageLayout),
                                 onPageChanged = { viewModel.saveReaderPage(score.uri, it) },
+                                onLayoutPreferenceChanged = { viewModel.saveReaderLayout(score.uri, it) },
                                 onBack = {
                                     intentScore.value = null
                                     selectedScore = null

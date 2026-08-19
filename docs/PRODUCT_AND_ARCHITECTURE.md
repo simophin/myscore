@@ -24,7 +24,9 @@ Files and folders have copy, move, and delete actions. Copy/move use a visible c
 
 ### PDF reading
 
-The reader uses the platform `PdfRenderer`, not a WebView or an unmaintained third-party PDF SDK. Pages are rendered off the main thread and only around the visible horizontal pager position. It supports horizontal page turns, pinch zoom/pan, and double-tap zoom. Expanded-width windows (840dp and above) show paired pages. Annotation is explicitly out of scope. While the reader is visible it applies Compose's `keepScreenOn` modifier; Android may sleep normally as soon as the reader leaves composition.
+The reader uses the platform `PdfRenderer`, not a WebView or an unmaintained third-party PDF SDK. Pages are rendered off the main thread and only around the visible horizontal pager position. It supports horizontal page turns, pinch zoom/pan, and double-tap zoom. Annotation is explicitly out of scope. While the reader is visible it applies Compose's `keepScreenOn` modifier; Android may sleep normally as soon as the reader leaves composition.
+
+Page layout is a per-document preference with three values: **Auto** (the default), **Single page**, and **Two pages**. Auto uses paired pages when the PDF content composable itself measures at least 840dp wide; it does not read device or physical screen width. Explicit Single and Two choices override that breakpoint at every measured width, and are stored under the same stable document-URI hash scheme as reader position. A layout change rebuilds the pager around its canonical visible PDF page, preventing unrelated position jumps. Copies have independent preferences; moves retain preferences when their document provider preserves document identity.
 
 The last settled page is persisted per document. The last-opened document URI is also persisted: on a cold start, MyScore reopens it at that page when it is still present in the configured library. If it has moved, been deleted, or lost permission, startup falls back to the gallery. The app accepts PDF `ACTION_VIEW` intents and `myscore://open?uri=<encoded-content-uri>` deep links. A caller must still grant access to a content URI; a deep link cannot bypass Android's URI permission model.
 
@@ -34,7 +36,7 @@ The selected tree is observed with `ContentObserver`, and the gallery refreshes 
 
 Layout decisions use the current app window bounds, not physical device type or rotation, so they update during desktop-window resizing, split screen, and fold/unfold changes. Portrait and square windows use bottom navigation; landscape windows place the three top-level destinations in a navigation rail on the left. Browser items remain row-shaped: compact windows use one list column, windows from 700dp use two columns, and windows from 1200dp use three. Reader windows at least 840dp wide show paired pages.
 
-The reader has an immersive full-screen toggle. It hides app chrome and system bars using `WindowInsetsControllerCompat`, permits transient bars via edge swipe, and keeps a small exit-full-screen control visible. Desktop windowing may retain the system-owned caption bar by platform design.
+The reader has an immersive full-screen toggle. It hides app chrome and system bars using `WindowInsetsControllerCompat`, permits transient bars via edge swipe, and keeps a small exit-full-screen control visible. Desktop windowing may retain the system-owned caption bar by platform design. Reader page layout is based on the measured reader widget after its own chrome/insets, so embedding or resizing that widget produces the same adaptive behavior without consulting device width.
 
 ### IMSLP and copyright
 
@@ -102,7 +104,8 @@ Implemented:
 - Root-confined folder-tree browser showing folders and PDFs as rows
 - Adaptive one-, two-, or three-column file list based on window width
 - Confirmed deletion and clipboard-style copy/move/paste for files and folders
-- Horizontal PDF reader with double-tap/pinch/pan, two-page expanded layout, remembered page, and last-score restoration
+- Horizontal PDF reader with double-tap/pinch/pan, remembered page, and last-score restoration
+- Per-score Auto/Single/Two page layout with widget-width-based Auto behavior
 - PDF `ACTION_VIEW` and `myscore://open?uri=…` deep-link handling
 - Automatic library refresh from provider change events plus an on-resume fallback
 - Window-responsive navigation: bottom bar in portrait, left rail in landscape/desktop windows
@@ -122,5 +125,5 @@ Next likely increments:
 
 ## Open product questions
 
-- Is horizontal page turning the preferred default, and is a two-page landscape mode important?
+- Is horizontal page turning the preferred default?
 - Which minimum Android version/device class matters most (phone, tablet, e-ink tablet)?

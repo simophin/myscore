@@ -16,6 +16,8 @@ import org.junit.Test
 import org.junit.runner.RunWith
 import java.io.File
 import java.io.FileOutputStream
+import kotlinx.coroutines.runBlocking
+import dev.fanchao.myscore.data.PageLayoutPreference
 
 @RunWith(AndroidJUnit4::class)
 class DeepLinkReaderTest {
@@ -32,21 +34,33 @@ class DeepLinkReaderTest {
         } finally {
             document.close()
         }
+        val pdfUri = Uri.fromFile(pdf)
         val intent = Intent(context, MainActivity::class.java).apply {
             action = Intent.ACTION_VIEW
-            setDataAndType(Uri.fromFile(pdf), "application/pdf")
+            setDataAndType(pdfUri, "application/pdf")
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        runBlocking {
+            context.settingsRepository.setReaderLayout(pdfUri.toString(), PageLayoutPreference.Auto)
         }
 
         val scenario = ActivityScenario.launch<MainActivity>(intent)
         try {
             composeRule.onNodeWithText("Deep Link Score").assertIsDisplayed()
             composeRule.onNodeWithText("1 pages").assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Page layout: Auto").performClick()
+            composeRule.onNodeWithText("Single page").performClick()
+            composeRule.onNodeWithContentDescription("Page layout: Single page").assertIsDisplayed()
+            scenario.recreate()
+            composeRule.onNodeWithContentDescription("Page layout: Single page").assertIsDisplayed()
             composeRule.onNodeWithContentDescription("Enter full screen").performClick()
             composeRule.onNodeWithContentDescription("Exit full screen").assertIsDisplayed().performClick()
             composeRule.onNodeWithText("Deep Link Score").assertIsDisplayed()
         } finally {
             scenario.close()
+            runBlocking {
+                context.settingsRepository.setReaderLayout(pdfUri.toString(), PageLayoutPreference.Auto)
+            }
         }
     }
 }

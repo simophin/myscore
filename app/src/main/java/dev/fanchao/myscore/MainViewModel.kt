@@ -8,6 +8,7 @@ import dev.fanchao.myscore.data.ScoreDocument
 import dev.fanchao.myscore.data.LibraryEntry
 import dev.fanchao.myscore.data.ScoreLibraryRepository
 import dev.fanchao.myscore.data.UserSettingsRepository
+import dev.fanchao.myscore.data.PageLayoutPreference
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.SharingStarted
@@ -263,6 +264,12 @@ class MainViewModel(
 
     fun saveReaderPage(uri: String, page: Int) {
         viewModelScope.launch { settings.setReaderPage(uri, page) }
+    }
+
+    fun readerLayout(uri: String) = settings.readerLayout(uri)
+
+    fun saveReaderLayout(uri: String, preference: PageLayoutPreference) {
+        viewModelScope.launch { settings.setReaderLayout(uri, preference) }
     }
 
     fun recordOpenedScore(uri: String) {

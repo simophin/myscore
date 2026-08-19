@@ -14,12 +14,15 @@ import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.FilledTonalIconButton
@@ -31,11 +34,13 @@ import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.key
 import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
@@ -47,14 +52,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalDensity
-import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import dev.fanchao.myscore.data.ScoreDocument
+import dev.fanchao.myscore.data.PageLayoutPreference
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
@@ -78,7 +82,9 @@ private class OpenPdf(val descriptor: ParcelFileDescriptor, val renderer: PdfRen
 fun PdfViewer(
     score: ScoreDocument,
     initialPage: Int,
+    layoutPreference: PageLayoutPreference,
     onPageChanged: (Int) -> Unit,
+    onLayoutPreferenceChanged: (PageLayoutPreference) -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -86,6 +92,8 @@ fun PdfViewer(
     var openPdf by remember(score.uri) { mutableStateOf<OpenPdf?>(null) }
     var error by remember(score.uri) { mutableStateOf<String?>(null) }
     var fullScreen by rememberSaveable(score.uri) { mutableStateOf(false) }
+    var layoutMenuExpanded by remember { mutableStateOf(false) }
+    var anchorPage by remember(score.uri) { mutableIntStateOf(initialPage) }
     ImmersiveSystemBars(fullScreen)
     BackHandler(enabled = fullScreen) { fullScreen = false }
 
@@ -107,6 +115,30 @@ fun PdfViewer(
                     title = { Text(score.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     actions = {
                         openPdf?.let { pdf -> Text("${pdf.renderer.pageCount} pages") }
+                        Box {
+                            IconButton(
+                                onClick = { layoutMenuExpanded = true },
+                                modifier = Modifier.semantics {
+                                    contentDescription = "Page layout: ${layoutPreference.label}"
+                                },
+                            ) { Text("▣", style = MaterialTheme.typography.titleLarge) }
+                            DropdownMenu(
+                                expanded = layoutMenuExpanded,
+                                onDismissRequest = { layoutMenuExpanded = false },
+                            ) {
+                                PageLayoutPreference.entries.forEach { preference ->
+                                    DropdownMenuItem(
+                                        text = {
+                                            Text("${if (preference == layoutPreference) "✓  " else ""}${preference.label}")
+                                        },
+                                        onClick = {
+                                            layoutMenuExpanded = false
+                                            onLayoutPreferenceChanged(preference)
+                                        },
+                                    )
+                                }
+                            }
+                        }
                         IconButton(
                             onClick = { fullScreen = true },
                             modifier = Modifier.semantics { contentDescription = "Enter full screen" },
@@ -125,32 +157,45 @@ fun PdfViewer(
             }
             else -> {
                 val pdf = requireNotNull(openPdf)
-                val windowWidth = with(LocalDensity.current) {
-                    LocalWindowInfo.current.containerSize.width.toDp()
-                }
-                val pagesPerPane = pagesPerPane(windowWidth.value)
-                val paneCount = ceil(pdf.renderer.pageCount / pagesPerPane.toDouble()).toInt()
-                val pagerState = rememberPagerState(
-                    initialPage = (initialPage / pagesPerPane).coerceIn(0, (paneCount - 1).coerceAtLeast(0)),
-                    pageCount = { paneCount },
-                )
-                LaunchedEffect(pagerState, pagesPerPane) {
-                    snapshotFlow { pagerState.settledPage }
-                        .distinctUntilChanged()
-                        .collect { pane -> onPageChanged(pane * pagesPerPane) }
-                }
-                Column(Modifier.fillMaxSize().padding(padding)) {
-                    HorizontalPager(
-                        state = pagerState,
-                        modifier = Modifier.fillMaxSize().background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                        beyondViewportPageCount = 1,
-                        pageSpacing = 8.dp,
-                    ) { paneIndex ->
-                        val firstPage = paneIndex * pagesPerPane
-                        androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
-                            PdfPage(pdf.renderer, firstPage, Modifier.weight(1f))
-                            if (pagesPerPane == 2 && firstPage + 1 < pdf.renderer.pageCount) {
-                                PdfPage(pdf.renderer, firstPage + 1, Modifier.weight(1f))
+                Box(Modifier.fillMaxSize().padding(padding)) {
+                    AdaptivePageLayout(
+                        preference = layoutPreference,
+                        modifier = Modifier.fillMaxSize(),
+                    ) { effectivePagesPerPane ->
+                        key(effectivePagesPerPane) {
+                            val paneCount = ceil(
+                                pdf.renderer.pageCount / effectivePagesPerPane.toDouble(),
+                            ).toInt()
+                            val pagerState = rememberPagerState(
+                                initialPage = (anchorPage / effectivePagesPerPane)
+                                    .coerceIn(0, (paneCount - 1).coerceAtLeast(0)),
+                                pageCount = { paneCount },
+                            )
+                            LaunchedEffect(pagerState, effectivePagesPerPane) {
+                                snapshotFlow { pagerState.settledPage }
+                                    .distinctUntilChanged()
+                                    .collect { pane ->
+                                        anchorPage = pane * effectivePagesPerPane
+                                        onPageChanged(anchorPage)
+                                    }
+                            }
+                            HorizontalPager(
+                                state = pagerState,
+                                modifier = Modifier.fillMaxSize()
+                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                beyondViewportPageCount = 1,
+                                pageSpacing = 8.dp,
+                            ) { paneIndex ->
+                                val firstPage = paneIndex * effectivePagesPerPane
+                                androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
+                                    PdfPage(pdf.renderer, firstPage, Modifier.weight(1f))
+                                    if (
+                                        effectivePagesPerPane == 2 &&
+                                        firstPage + 1 < pdf.renderer.pageCount
+                                    ) {
+                                        PdfPage(pdf.renderer, firstPage + 1, Modifier.weight(1f))
+                                    }
+                                }
                             }
                         }
                     }
@@ -169,6 +214,24 @@ fun PdfViewer(
         }
     }
 }
+
+@Composable
+internal fun AdaptivePageLayout(
+    preference: PageLayoutPreference,
+    modifier: Modifier = Modifier,
+    content: @Composable (pagesPerPane: Int) -> Unit,
+) {
+    BoxWithConstraints(modifier) {
+        content(pagesPerPane(maxWidth.value, preference))
+    }
+}
+
+private val PageLayoutPreference.label: String
+    get() = when (this) {
+        PageLayoutPreference.Auto -> "Auto"
+        PageLayoutPreference.Single -> "Single page"
+        PageLayoutPreference.Two -> "Two pages"
+    }
 
 @Composable
 private fun ImmersiveSystemBars(enabled: Boolean) {

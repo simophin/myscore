@@ -5,6 +5,7 @@ import dev.fanchao.myscore.data.ScoreLibraryRepository
 import dev.fanchao.myscore.data.DirectoryListing
 import dev.fanchao.myscore.data.LibraryEntry
 import dev.fanchao.myscore.data.UserSettingsRepository
+import dev.fanchao.myscore.data.PageLayoutPreference
 import kotlinx.coroutines.ExperimentalCoroutinesApi
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -75,6 +76,18 @@ class MainViewModelTest {
     }
 
     @Test
+    fun `reader layout is persisted independently for each score`() = runTest {
+        val viewModel = observedViewModel()
+
+        viewModel.saveReaderLayout("content://scores/bach.pdf", PageLayoutPreference.Single)
+        viewModel.saveReaderLayout("content://scores/mozart.pdf", PageLayoutPreference.Two)
+        advanceUntilIdle()
+
+        assertEquals(PageLayoutPreference.Single, settings.layouts["content://scores/bach.pdf"]?.value)
+        assertEquals(PageLayoutPreference.Two, settings.layouts["content://scores/mozart.pdf"]?.value)
+    }
+
+    @Test
     fun `folder navigation remains in repository-provided tree and supports back`() = runTest {
         val viewModel = observedViewModel()
         val folder = LibraryEntry("content://scores/bach", "Bach", true, 0, 0)
@@ -119,12 +132,18 @@ private class FakeSettingsRepository : UserSettingsRepository {
     override val libraryUri = MutableStateFlow<String?>(null)
     override val lastScoreUri = MutableStateFlow<String?>(null)
     val pages = mutableMapOf<String, MutableStateFlow<Int>>()
+    val layouts = mutableMapOf<String, MutableStateFlow<PageLayoutPreference>>()
 
     override suspend fun setLibraryUri(uri: String) { libraryUri.value = uri }
     override suspend fun setLastScoreUri(uri: String) { lastScoreUri.value = uri }
     override fun readerPage(uri: String): Flow<Int> = pages.getOrPut(uri) { MutableStateFlow(0) }
     override suspend fun setReaderPage(uri: String, page: Int) {
         pages.getOrPut(uri) { MutableStateFlow(0) }.value = page
+    }
+    override fun readerLayout(uri: String): Flow<PageLayoutPreference> =
+        layouts.getOrPut(uri) { MutableStateFlow(PageLayoutPreference.Auto) }
+    override suspend fun setReaderLayout(uri: String, preference: PageLayoutPreference) {
+        layouts.getOrPut(uri) { MutableStateFlow(PageLayoutPreference.Auto) }.value = preference
     }
 }
 
