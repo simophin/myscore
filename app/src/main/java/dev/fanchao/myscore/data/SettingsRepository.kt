@@ -1,15 +1,7 @@
 package dev.fanchao.myscore.data
 
-import android.content.Context
-import android.net.Uri
-import androidx.datastore.preferences.core.edit
-import androidx.datastore.preferences.core.stringPreferencesKey
-import androidx.datastore.preferences.preferencesDataStore
 import kotlinx.coroutines.flow.Flow
 import kotlinx.coroutines.flow.map
-import java.security.MessageDigest
-
-private val Context.settingsDataStore by preferencesDataStore(name = "settings")
 
 interface UserSettingsRepository {
     val libraryUri: Flow<String?>
@@ -33,44 +25,35 @@ enum class PageLayoutPreference(val storedValue: String) {
     }
 }
 
-class DataStoreUserSettingsRepository(private val context: Context) : UserSettingsRepository {
-    private val libraryUriKey = stringPreferencesKey("library_uri")
-    private val lastScoreUriKey = stringPreferencesKey("last_score_uri")
+class RoomUserSettingsRepository(private val dao: SettingsDao) : UserSettingsRepository {
+    override val libraryUri: Flow<String?> = dao.observeConfig(LIBRARY_URI).map { it?.value }
 
-    override val libraryUri: Flow<String?> = context.settingsDataStore.data.map { it[libraryUriKey] }
-
-    override val lastScoreUri: Flow<String?> = context.settingsDataStore.data.map { it[lastScoreUriKey] }
+    override val lastScoreUri: Flow<String?> = dao.observeConfig(LAST_SCORE_URI).map { it?.value }
 
     override suspend fun setLibraryUri(uri: String) {
-        context.settingsDataStore.edit { it[libraryUriKey] = uri }
+        dao.upsertConfig(ConfigEntity(LIBRARY_URI, uri))
     }
 
     override suspend fun setLastScoreUri(uri: String) {
-        context.settingsDataStore.edit { it[lastScoreUriKey] = uri }
+        dao.upsertConfig(ConfigEntity(LAST_SCORE_URI, uri))
     }
 
-    override fun readerPage(uri: String): Flow<Int> {
-        val key = stringPreferencesKey("reader_page_${uri.stableKey()}")
-        return context.settingsDataStore.data.map { it[key]?.toIntOrNull() ?: 0 }
-    }
+    override fun readerPage(uri: String): Flow<Int> =
+        dao.observeUriPreference(uri).map { it?.page ?: 0 }
 
     override suspend fun setReaderPage(uri: String, page: Int) {
-        val key = stringPreferencesKey("reader_page_${uri.stableKey()}")
-        context.settingsDataStore.edit { it[key] = page.coerceAtLeast(0).toString() }
+        dao.setPage(uri, page.coerceAtLeast(0))
     }
 
-    override fun readerLayout(uri: String): Flow<PageLayoutPreference> {
-        val key = stringPreferencesKey("reader_layout_${uri.stableKey()}")
-        return context.settingsDataStore.data.map { PageLayoutPreference.fromStoredValue(it[key]) }
-    }
+    override fun readerLayout(uri: String): Flow<PageLayoutPreference> =
+        dao.observeUriPreference(uri).map { it?.layout ?: PageLayoutPreference.Auto }
 
     override suspend fun setReaderLayout(uri: String, preference: PageLayoutPreference) {
-        val key = stringPreferencesKey("reader_layout_${uri.stableKey()}")
-        context.settingsDataStore.edit { it[key] = preference.storedValue }
+        dao.setLayout(uri, preference)
     }
 
-    private fun String.stableKey(): String = MessageDigest.getInstance("SHA-256")
-        .digest(toByteArray())
-        .take(12)
-        .joinToString("") { "%02x".format(it) }
+    private companion object {
+        const val LIBRARY_URI = "library_uri"
+        const val LAST_SCORE_URI = "last_score_uri"
+    }
 }

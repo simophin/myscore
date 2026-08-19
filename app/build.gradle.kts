@@ -1,6 +1,12 @@
 plugins {
     id("com.android.application")
+    id("androidx.room")
+    id("com.google.devtools.ksp")
     id("org.jetbrains.kotlin.plugin.compose")
+}
+
+room {
+    schemaDirectory("$projectDir/schemas")
 }
 
 android {
@@ -62,10 +68,12 @@ dependencies {
     implementation("androidx.compose.ui:ui")
     implementation("androidx.compose.ui:ui-tooling-preview")
     implementation("androidx.core:core-ktx:1.19.0")
-    implementation("androidx.datastore:datastore-preferences:1.2.1")
     implementation("androidx.documentfile:documentfile:1.1.0")
     implementation("androidx.lifecycle:lifecycle-runtime-compose:2.11.0")
     implementation("androidx.lifecycle:lifecycle-viewmodel-compose:2.11.0")
+    implementation("androidx.room:room-runtime:2.8.4")
+    implementation("androidx.room:room-ktx:2.8.4")
+    ksp("androidx.room:room-compiler:2.8.4")
 
     debugImplementation("androidx.compose.ui:ui-tooling")
 
