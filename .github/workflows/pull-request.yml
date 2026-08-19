@@ -19,5 +19,8 @@ jobs:
           java-version: 21
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # PRs can reuse main's cache without allowing untrusted branches to update it.
+          cache-read-only: true
       - name: Run unit tests
         run: ./gradlew testDebugUnitTest --no-daemon

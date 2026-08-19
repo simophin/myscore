@@ -1,6 +1,8 @@
 name: Build release APK
 
 on:
+  push:
+    branches: [main]
   release:
     types: [published]
 
@@ -20,11 +22,23 @@ jobs:
           java-version: 21
       - name: Set up Gradle
         uses: gradle/actions/setup-gradle@v6
+        with:
+          # Main populates the shared cache; tag/release builds only consume it.
+          cache-read-only: ${{ github.event_name == 'release' }}
       - name: Build signed release APK without R8
         run: ./gradlew assembleRelease --no-daemon
+      - name: Upload APK artifact
+        if: github.event_name == 'push'
+        uses: actions/upload-artifact@v4
+        with:
+          name: myscore-release-${{ github.sha }}
+          path: app/build/outputs/apk/release/app-release.apk
+          if-no-files-found: error
       - name: Give APK a release-specific name
+        if: github.event_name == 'release'
         run: cp app/build/outputs/apk/release/app-release.apk "myscore-${{ github.event.release.tag_name }}.apk"
       - name: Upload APK to GitHub release
+        if: github.event_name == 'release'
         uses: softprops/action-gh-release@v2
         with:
           files: myscore-${{ github.event.release.tag_name }}.apk
