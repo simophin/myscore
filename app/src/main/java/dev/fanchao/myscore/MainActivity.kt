@@ -82,6 +82,7 @@ class MainActivity : ComponentActivity() {
                             onChooseFolder = { folderPicker.launch(libraryUri?.let(Uri::parse)) },
                             onImportPdf = { pdfPicker.launch(arrayOf("application/pdf")) },
                             onDownloadPdf = viewModel::downloadPdf,
+                            onOpenDownloadedScore = { selectedScore = it },
                             onRefresh = viewModel::refresh,
                             onOpenScore = { selectedScore = it },
                             onOpenDirectory = viewModel::openDirectory,

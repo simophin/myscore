@@ -4,8 +4,9 @@ import android.content.Intent
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.ViewModelProvider
 import androidx.lifecycle.viewModelScope
-import dev.fanchao.myscore.data.ScoreDocument
+import dev.fanchao.myscore.data.DownloadedScore
 import dev.fanchao.myscore.data.LibraryEntry
+import dev.fanchao.myscore.data.ScoreDocument
 import dev.fanchao.myscore.data.ScoreLibraryRepository
 import dev.fanchao.myscore.data.UserSettingsRepository
 import dev.fanchao.myscore.data.PageLayoutPreference
@@ -28,6 +29,7 @@ data class LibraryUiState(
     val entries: List<LibraryEntry> = emptyList(),
     val path: List<FolderLocation> = emptyList(),
     val clipboard: FileClipboard? = null,
+    val downloadedScore: DownloadedScore? = null,
 )
 
 data class FolderLocation(val uri: String, val name: String)
@@ -275,22 +277,28 @@ class MainViewModel(
         }
         if (_libraryState.value.downloading) return
         viewModelScope.launch {
-            _libraryState.value = _libraryState.value.copy(downloading = true, message = "Downloading score…")
+            _libraryState.value = _libraryState.value.copy(
+                downloading = true,
+                message = "Downloading score…",
+                downloadedScore = null,
+            )
             library.downloadPdf(url, userAgent, contentDisposition, mimeType, cookies, destination)
-                .onSuccess { name ->
+                .onSuccess { downloaded ->
                     val scores = runCatching { library.findScores(destination) }.getOrDefault(_libraryState.value.scores)
                     _libraryState.value = _libraryState.value.copy(
                         initialized = true,
                         scores = scores,
                         loading = false,
                         downloading = false,
-                        message = "$name downloaded",
+                        message = "${downloaded.fileName} downloaded",
+                        downloadedScore = downloaded,
                     )
                 }
                 .onFailure { failure ->
                     _libraryState.value = _libraryState.value.copy(
                         downloading = false,
                         message = failure.message ?: "Download failed",
+                        downloadedScore = null,
                     )
                 }
         }

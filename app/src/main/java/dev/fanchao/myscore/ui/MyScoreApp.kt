@@ -85,6 +85,7 @@ fun MyScoreApp(
     onChooseFolder: () -> Unit,
     onImportPdf: () -> Unit,
     onDownloadPdf: (String, String?, String?, String?, String?) -> Unit,
+    onOpenDownloadedScore: (ScoreDocument) -> Unit,
     onRefresh: () -> Unit,
     onOpenScore: (ScoreDocument) -> Unit,
     onOpenDirectory: (LibraryEntry) -> Unit,
@@ -176,6 +177,7 @@ fun MyScoreApp(
                     hasLibrary = libraryUri != null,
                     state = libraryState,
                     onDownloadPdf = onDownloadPdf,
+                    onOpenDownloadedScore = onOpenDownloadedScore,
                 )
                 AppTab.Settings -> SettingsScreen(
                     modifier = Modifier.padding(padding),
@@ -468,6 +470,7 @@ private fun FindScreen(
     hasLibrary: Boolean,
     state: LibraryUiState,
     onDownloadPdf: (String, String?, String?, String?, String?) -> Unit,
+    onOpenDownloadedScore: (ScoreDocument) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var webView by remember { mutableStateOf<android.webkit.WebView?>(null) }
@@ -511,13 +514,25 @@ private fun FindScreen(
                     Button(onClick = { webView?.loadUrl(searchUrl()) }, enabled = query.isNotBlank()) { Text("Go") }
                 }
                 if (state.message != null) {
-                    Text(
-                        state.message,
-                        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp),
-                        color = if (state.message.contains("failed", true)) MaterialTheme.colorScheme.error
-                        else MaterialTheme.colorScheme.primary,
-                        style = MaterialTheme.typography.labelLarge,
-                    )
+                    Row(
+                        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Text(
+                            state.message,
+                            modifier = Modifier.weight(1f),
+                            color = if (state.message.contains("failed", true)) MaterialTheme.colorScheme.error
+                            else MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelLarge,
+                        )
+                        state.downloadedScore
+                            ?.takeIf { state.message == "${it.fileName} downloaded" }
+                            ?.let { downloaded ->
+                                TextButton(onClick = { onOpenDownloadedScore(downloaded.document) }) {
+                                    Text("Open")
+                                }
+                            }
+                    }
                 }
                 if (!hasLibrary) {
                     Text(
