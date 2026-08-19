@@ -91,6 +91,8 @@ class MainActivity : ComponentActivity() {
                             onMove = viewModel::stageMove,
                             onPaste = viewModel::paste,
                             onClearClipboard = viewModel::clearClipboard,
+                            onCreateFolder = viewModel::createFolder,
+                            onRename = viewModel::rename,
                             onDelete = viewModel::delete,
                         )
                     } else {

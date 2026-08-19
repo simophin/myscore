@@ -132,6 +132,42 @@ class MainViewModel(
         _libraryState.value = _libraryState.value.copy(clipboard = null)
     }
 
+    fun createFolder(name: String) {
+        val treeUri = uiState.value.libraryUri ?: return
+        val parentUri = _libraryState.value.path.lastOrNull()?.uri ?: return
+        viewModelScope.launch {
+            _libraryState.value = _libraryState.value.copy(loading = true, message = null)
+            library.createDirectory(treeUri, parentUri, name)
+                .onSuccess { refresh(treeUri) }
+                .onFailure { failure ->
+                    _libraryState.value = _libraryState.value.copy(
+                        loading = false,
+                        message = failure.message ?: "Could not create folder",
+                    )
+                }
+        }
+    }
+
+    fun rename(entry: LibraryEntry, name: String) {
+        val treeUri = uiState.value.libraryUri ?: return
+        viewModelScope.launch {
+            _libraryState.value = _libraryState.value.copy(loading = true, message = null)
+            library.renameEntry(treeUri, entry.uri, name)
+                .onSuccess {
+                    if (_libraryState.value.clipboard?.entry?.uri == entry.uri) {
+                        _libraryState.value = _libraryState.value.copy(clipboard = null)
+                    }
+                    refresh(treeUri)
+                }
+                .onFailure { failure ->
+                    _libraryState.value = _libraryState.value.copy(
+                        loading = false,
+                        message = failure.message ?: "Could not rename ${entry.name}",
+                    )
+                }
+        }
+    }
+
     fun paste() {
         val treeUri = uiState.value.libraryUri ?: return
         val state = _libraryState.value

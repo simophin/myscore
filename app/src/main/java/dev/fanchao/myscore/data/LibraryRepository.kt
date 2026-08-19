@@ -37,6 +37,8 @@ data class DirectoryListing(
 interface ScoreLibraryRepository {
     suspend fun findScores(treeUri: String): List<ScoreDocument>
     suspend fun listDirectory(treeUri: String, directoryUri: String? = null): DirectoryListing
+    suspend fun createDirectory(treeUri: String, parentDirectoryUri: String, name: String): Result<Unit>
+    suspend fun renameEntry(treeUri: String, entryUri: String, name: String): Result<Unit>
     suspend fun deleteEntry(treeUri: String, entryUri: String): Result<Unit>
     suspend fun copyEntry(treeUri: String, entryUri: String, destinationDirectoryUri: String): Result<Unit>
     suspend fun moveEntry(treeUri: String, entryUri: String, destinationDirectoryUri: String): Result<Unit>
@@ -80,6 +82,45 @@ class AndroidScoreLibraryRepository(private val context: Context) : ScoreLibrary
                 .sortedWith(compareByDescending<LibraryEntry> { it.isDirectory }.thenBy { it.name.lowercase() })
                 .toList(),
         )
+    }
+
+    override suspend fun createDirectory(
+        treeUri: String,
+        parentDirectoryUri: String,
+        name: String,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val root = requireRoot(treeUri)
+            val parent = requireDirectory(root, parentDirectoryUri)
+            val validName = validateName(name)
+            requireNameAvailable(parent, validName)
+            requireNotNull(parent.createDirectory(validName)) { "Could not create $validName" }
+            Unit
+        }
+    }
+
+    override suspend fun renameEntry(
+        treeUri: String,
+        entryUri: String,
+        name: String,
+    ): Result<Unit> = withContext(Dispatchers.IO) {
+        runCatching {
+            val root = requireRoot(treeUri)
+            val entryWithParent = requireNotNull(findDescendantWithParent(root, entryUri.toUri())) {
+                "Item is outside the score library"
+            }
+            val entry = entryWithParent.first
+            val parent = requireNotNull(entryWithParent.second) { "The score library root cannot be renamed" }
+            val validName = validateName(name)
+            require(entry.isDirectory || validName.endsWith(".pdf", ignoreCase = true)) {
+                "Score names must end in .pdf"
+            }
+            if (entry.name == validName) return@runCatching
+            requireNameAvailable(parent, validName, entry.uri)
+            require(entry.renameTo(validName)) {
+                "The storage provider could not rename ${entry.name ?: "this item"}"
+            }
+        }
     }
 
     override suspend fun deleteEntry(treeUri: String, entryUri: String): Result<Unit> =
@@ -332,6 +373,23 @@ class AndroidScoreLibraryRepository(private val context: Context) : ScoreLibrary
         var index = 2
         while ("$base ($index)$extension".lowercase() in existing) index++
         return "$base ($index)$extension"
+    }
+
+    private fun validateName(requested: String): String {
+        val name = requested.trim()
+        require(name.isNotEmpty()) { "Name cannot be empty" }
+        require(name != "." && name != "..") { "Choose a different name" }
+        require(name.none { it == '/' || it == '\\' || it.isISOControl() }) {
+            "Name cannot contain slashes or control characters"
+        }
+        return name
+    }
+
+    private fun requireNameAvailable(directory: DocumentFile, name: String, exceptUri: Uri? = null) {
+        val duplicate = directory.listFiles().any {
+            it.uri != exceptUri && it.name.equals(name, ignoreCase = true)
+        }
+        require(!duplicate) { "An item named $name already exists" }
     }
 
     private fun isPdf(document: DocumentFile): Boolean = document.isFile && (
