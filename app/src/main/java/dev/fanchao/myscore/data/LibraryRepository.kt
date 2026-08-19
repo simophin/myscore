@@ -55,9 +55,9 @@ interface ScoreLibraryRepository {
 
 class AndroidScoreLibraryRepository(private val context: Context) : ScoreLibraryRepository {
     override suspend fun findScores(treeUri: String): List<ScoreDocument> = withContext(Dispatchers.IO) {
-        val treeUri = treeUri.toUri()
-        val root = DocumentFile.fromTreeUri(context, treeUri) ?: return@withContext emptyList()
-        buildList { collectPdfFiles(root, this) }
+        val tree = treeUri.toUri()
+        val root = DocumentFile.fromTreeUri(context, tree) ?: return@withContext emptyList()
+        buildList { collectPdfFiles(tree, root.uri, this) }
             .sortedBy { it.title.lowercase() }
     }
 
@@ -65,22 +65,18 @@ class AndroidScoreLibraryRepository(private val context: Context) : ScoreLibrary
         treeUri: String,
         directoryUri: String?,
     ): DirectoryListing = withContext(Dispatchers.IO) {
+        val tree = treeUri.toUri()
         val root = requireRoot(treeUri)
-        val directory = if (directoryUri == null || directoryUri == root.uri.toString()) {
-            root
-        } else {
-            requireNotNull(findDescendant(root, directoryUri.toUri())) { "Folder is outside the score library" }
+        val directory = directoryUri?.toUri() ?: root.uri
+        require(directory == root.uri || belongsToTree(tree, directory)) {
+            "Folder is outside the score library"
         }
-        require(directory.isDirectory) { "This item is not a folder" }
+        val directoryName = queryDirectoryName(directory)
         DirectoryListing(
-            directoryUri = directory.uri.toString(),
-            directoryName = directory.name ?: "Scores",
-            entries = directory.listFiles()
-                .asSequence()
-                .filter { it.isDirectory || isPdf(it) }
-                .map { it.toLibraryEntry() }
+            directoryUri = directory.toString(),
+            directoryName = directoryName,
+            entries = queryDirectoryEntries(tree, directory)
                 .sortedWith(compareByDescending<LibraryEntry> { it.isDirectory }.thenBy { it.name.lowercase() })
-                .toList(),
         )
     }
 
@@ -254,18 +250,16 @@ class AndroidScoreLibraryRepository(private val context: Context) : ScoreLibrary
         }
     }
 
-    private fun collectPdfFiles(directory: DocumentFile, destination: MutableList<ScoreDocument>) {
-        directory.listFiles().forEach { document ->
-            when {
-                document.isDirectory -> collectPdfFiles(document, destination)
-                document.isFile && (
-                    document.type == "application/pdf" ||
-                        document.name?.endsWith(".pdf", ignoreCase = true) == true
-                    ) -> destination += ScoreDocument(
-                    uri = document.uri.toString(),
-                    title = document.name?.removeSuffix(".pdf")?.removeSuffix(".PDF") ?: "Untitled score",
-                    sizeBytes = document.length(),
-                    modifiedAtMillis = document.lastModified(),
+    private fun collectPdfFiles(tree: Uri, directory: Uri, destination: MutableList<ScoreDocument>) {
+        queryDirectoryEntries(tree, directory).forEach { entry ->
+            if (entry.isDirectory) {
+                collectPdfFiles(tree, entry.uri.toUri(), destination)
+            } else {
+                destination += ScoreDocument(
+                    uri = entry.uri,
+                    title = entry.name.removeSuffix(".pdf").removeSuffix(".PDF"),
+                    sizeBytes = entry.sizeBytes,
+                    modifiedAtMillis = entry.modifiedAtMillis,
                 )
             }
         }
@@ -275,6 +269,62 @@ class AndroidScoreLibraryRepository(private val context: Context) : ScoreLibrary
         requireNotNull(DocumentFile.fromTreeUri(context, treeUri.toUri())) {
             "The score folder is no longer available"
         }
+
+    private fun belongsToTree(tree: Uri, target: Uri): Boolean =
+        tree.authority == target.authority && runCatching {
+            DocumentsContract.getTreeDocumentId(tree) == DocumentsContract.getTreeDocumentId(target)
+        }.getOrDefault(false)
+
+    private fun queryDirectoryName(directory: Uri): String {
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+        )
+        return context.contentResolver.query(directory, projection, null, null, null)?.use { cursor ->
+            require(cursor.moveToFirst()) { "The score folder is no longer available" }
+            require(cursor.getString(1) == DocumentsContract.Document.MIME_TYPE_DIR) {
+                "This item is not a folder"
+            }
+            cursor.getString(0) ?: "Scores"
+        } ?: error("The score folder is no longer available")
+    }
+
+    private fun queryDirectoryEntries(tree: Uri, directory: Uri): List<LibraryEntry> {
+        val childrenUri = DocumentsContract.buildChildDocumentsUriUsingTree(
+            tree,
+            DocumentsContract.getDocumentId(directory),
+        )
+        val projection = arrayOf(
+            DocumentsContract.Document.COLUMN_DOCUMENT_ID,
+            DocumentsContract.Document.COLUMN_DISPLAY_NAME,
+            DocumentsContract.Document.COLUMN_MIME_TYPE,
+            DocumentsContract.Document.COLUMN_SIZE,
+            DocumentsContract.Document.COLUMN_LAST_MODIFIED,
+        )
+        return context.contentResolver.query(childrenUri, projection, null, null, null)?.use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) {
+                    val mimeType = cursor.getString(2)
+                    val name = cursor.getString(1)
+                    val isDirectory = mimeType == DocumentsContract.Document.MIME_TYPE_DIR
+                    if (isDirectory || mimeType == "application/pdf" || name?.endsWith(".pdf", true) == true) {
+                        add(
+                            LibraryEntry(
+                                uri = DocumentsContract.buildDocumentUriUsingTree(
+                                    tree,
+                                    cursor.getString(0),
+                                ).toString(),
+                                name = name ?: if (isDirectory) "Untitled folder" else "Untitled score.pdf",
+                                isDirectory = isDirectory,
+                                sizeBytes = if (cursor.isNull(3)) 0L else cursor.getLong(3),
+                                modifiedAtMillis = if (cursor.isNull(4)) 0L else cursor.getLong(4),
+                            ),
+                        )
+                    }
+                }
+            }
+        } ?: emptyList()
+    }
 
     private fun requireDirectory(root: DocumentFile, uri: String): DocumentFile {
         val directory = requireNotNull(findDescendant(root, uri.toUri())) {
@@ -391,18 +441,6 @@ class AndroidScoreLibraryRepository(private val context: Context) : ScoreLibrary
         }
         require(!duplicate) { "An item named $name already exists" }
     }
-
-    private fun isPdf(document: DocumentFile): Boolean = document.isFile && (
-        document.type == "application/pdf" || document.name?.endsWith(".pdf", ignoreCase = true) == true
-        )
-
-    private fun DocumentFile.toLibraryEntry() = LibraryEntry(
-        uri = uri.toString(),
-        name = name ?: if (isDirectory) "Untitled folder" else "Untitled score.pdf",
-        isDirectory = isDirectory,
-        sizeBytes = length(),
-        modifiedAtMillis = lastModified(),
-    )
 
     private fun queryDisplayName(resolver: ContentResolver, uri: Uri): String? =
         resolver.query(uri, arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
