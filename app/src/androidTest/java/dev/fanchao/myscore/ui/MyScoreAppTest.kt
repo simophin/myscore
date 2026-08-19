@@ -9,12 +9,15 @@ import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.espresso.Espresso.pressBack
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
 import dev.fanchao.myscore.LibraryUiState
 import dev.fanchao.myscore.data.ScoreDocument
 import dev.fanchao.myscore.data.DownloadedScore
 import dev.fanchao.myscore.data.LibraryEntry
 import dev.fanchao.myscore.ui.theme.MyScoreTheme
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertSame
 import org.junit.Rule
 import org.junit.Test
 
@@ -244,7 +247,7 @@ class MyScoreAppTest {
     }
 
     @Test
-    fun findSearchOpensAsAnAppBarDialog() {
+    fun findWebViewInstanceSurvivesTabSwitch() {
         composeRule.setContent {
             MyScoreTheme {
                 MyScoreApp(
@@ -274,5 +277,17 @@ class MyScoreAppTest {
         composeRule.onNodeWithText("Search IMSLP").assertIsDisplayed()
         composeRule.onNode(hasSetTextAction()).performTextInput("Bach cello suites")
         composeRule.onNodeWithText("Search").performClick()
+
+        lateinit var initialWebView: android.webkit.WebView
+        onView(isAssignableFrom(android.webkit.WebView::class.java)).check { view, _ ->
+            initialWebView = view as android.webkit.WebView
+        }
+
+        composeRule.onNodeWithText("Settings").performClick()
+        composeRule.onNodeWithText("Find").performClick()
+
+        onView(isAssignableFrom(android.webkit.WebView::class.java)).check { view, _ ->
+            assertSame(initialWebView, view)
+        }
     }
 }
