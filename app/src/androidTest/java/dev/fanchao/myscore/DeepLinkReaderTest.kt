@@ -1,0 +1,52 @@
+package dev.fanchao.myscore
+
+import android.content.Intent
+import android.graphics.pdf.PdfDocument
+import android.net.Uri
+import androidx.compose.ui.test.assertIsDisplayed
+import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onNodeWithText
+import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.performClick
+import androidx.test.core.app.ActivityScenario
+import androidx.test.core.app.ApplicationProvider
+import androidx.test.ext.junit.runners.AndroidJUnit4
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
+import java.io.File
+import java.io.FileOutputStream
+
+@RunWith(AndroidJUnit4::class)
+class DeepLinkReaderTest {
+    @get:Rule val composeRule = createEmptyComposeRule()
+
+    @Test
+    fun pdfViewIntentOpensReaderEndToEnd() {
+        val context = ApplicationProvider.getApplicationContext<MyScoreApplication>()
+        val pdf = File(context.cacheDir, "Deep Link Score.pdf")
+        val document = PdfDocument()
+        try {
+            document.startPage(PdfDocument.PageInfo.Builder(600, 800, 1).create()).also(document::finishPage)
+            FileOutputStream(pdf).use(document::writeTo)
+        } finally {
+            document.close()
+        }
+        val intent = Intent(context, MainActivity::class.java).apply {
+            action = Intent.ACTION_VIEW
+            setDataAndType(Uri.fromFile(pdf), "application/pdf")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+
+        val scenario = ActivityScenario.launch<MainActivity>(intent)
+        try {
+            composeRule.onNodeWithText("Deep Link Score").assertIsDisplayed()
+            composeRule.onNodeWithText("1 pages").assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Enter full screen").performClick()
+            composeRule.onNodeWithContentDescription("Exit full screen").assertIsDisplayed().performClick()
+            composeRule.onNodeWithText("Deep Link Score").assertIsDisplayed()
+        } finally {
+            scenario.close()
+        }
+    }
+}

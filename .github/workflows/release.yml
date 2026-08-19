@@ -1,0 +1,30 @@
+name: Build release APK
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+jobs:
+  apk:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out source
+        uses: actions/checkout@v6
+      - name: Set up Java
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: 21
+      - name: Set up Gradle
+        uses: gradle/actions/setup-gradle@v6
+      - name: Build signed release APK without R8
+        run: ./gradlew assembleRelease --no-daemon
+      - name: Give APK a release-specific name
+        run: cp app/build/outputs/apk/release/app-release.apk "myscore-${{ github.event.release.tag_name }}.apk"
+      - name: Upload APK to GitHub release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: myscore-${{ github.event.release.tag_name }}.apk
