@@ -45,12 +45,11 @@ class RoomUserSettingsRepository(private val dao: SettingsDao) : UserSettingsRep
         dao.setPage(uri, page.coerceAtLeast(0))
     }
 
-    override fun readerLayout(uri: String): Flow<PageLayoutPreference> = dao.observeUriPreference(uri).map {
-        PageLayoutPreference.fromStoredValue(it?.layout)
-    }
+    override fun readerLayout(uri: String): Flow<PageLayoutPreference> =
+        dao.observeUriPreference(uri).map { it?.layout ?: PageLayoutPreference.Auto }
 
     override suspend fun setReaderLayout(uri: String, preference: PageLayoutPreference) {
-        dao.setLayout(uri, preference.storedValue)
+        dao.setLayout(uri, preference)
     }
 
     private companion object {

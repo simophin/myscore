@@ -11,6 +11,8 @@ import androidx.room.Query
 import androidx.room.Room
 import androidx.room.RoomDatabase
 import androidx.room.Transaction
+import androidx.room.TypeConverter
+import androidx.room.TypeConverters
 import androidx.room.Upsert
 import kotlinx.coroutines.flow.Flow
 
@@ -24,8 +26,17 @@ data class ConfigEntity(
 data class UriPreferenceEntity(
     @PrimaryKey val uri: String,
     val page: Int = 0,
-    val layout: String = PageLayoutPreference.Auto.storedValue,
+    val layout: PageLayoutPreference = PageLayoutPreference.Auto,
 )
+
+class PreferenceConverters {
+    @TypeConverter
+    fun pageLayoutFromStoredValue(value: String): PageLayoutPreference =
+        PageLayoutPreference.fromStoredValue(value)
+
+    @TypeConverter
+    fun pageLayoutToStoredValue(value: PageLayoutPreference): String = value.storedValue
+}
 
 @Dao
 interface SettingsDao {
@@ -45,7 +56,7 @@ interface SettingsDao {
     suspend fun updatePage(uri: String, page: Int)
 
     @Query("UPDATE uri_preferences SET layout = :layout WHERE uri = :uri")
-    suspend fun updateLayout(uri: String, layout: String)
+    suspend fun updateLayout(uri: String, layout: PageLayoutPreference)
 
     @Transaction
     suspend fun setPage(uri: String, page: Int) {
@@ -54,7 +65,7 @@ interface SettingsDao {
     }
 
     @Transaction
-    suspend fun setLayout(uri: String, layout: String) {
+    suspend fun setLayout(uri: String, layout: PageLayoutPreference) {
         insertUriPreference(UriPreferenceEntity(uri = uri))
         updateLayout(uri, layout)
     }
@@ -65,6 +76,7 @@ interface SettingsDao {
     version = 1,
     exportSchema = true,
 )
+@TypeConverters(PreferenceConverters::class)
 abstract class MyScoreDatabase : RoomDatabase() {
     abstract fun settingsDao(): SettingsDao
 
