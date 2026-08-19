@@ -121,6 +121,39 @@ class MainViewModelTest {
         assertEquals(FileTransferMode.Copy, viewModel.uiState.value.library.clipboard?.mode)
     }
 
+    @Test
+    fun `create folder targets current directory`() = runTest {
+        val viewModel = observedViewModel()
+        val folder = LibraryEntry("content://scores/bach", "Bach", true, 0, 0)
+        library.listings["content://scores"] = DirectoryListing("content://scores", "Scores", listOf(folder))
+        library.listings[folder.uri] = DirectoryListing(folder.uri, folder.name, emptyList())
+
+        viewModel.setLibraryFolder("content://scores")
+        advanceUntilIdle()
+        viewModel.openDirectory(folder)
+        advanceUntilIdle()
+        viewModel.createFolder("Concertos")
+        advanceUntilIdle()
+
+        assertEquals(Triple("content://scores", folder.uri, "Concertos"), library.lastCreateDirectory)
+    }
+
+    @Test
+    fun `rename delegates entry and clears matching clipboard`() = runTest {
+        val viewModel = observedViewModel()
+        val score = LibraryEntry("content://scores/bach.pdf", "Bach.pdf", false, 100, 0)
+        library.listings["content://scores"] = DirectoryListing("content://scores", "Scores", listOf(score))
+
+        viewModel.setLibraryFolder("content://scores")
+        advanceUntilIdle()
+        viewModel.stageMove(score)
+        viewModel.rename(score, "Prelude.pdf")
+        advanceUntilIdle()
+
+        assertEquals(Triple("content://scores", score.uri, "Prelude.pdf"), library.lastRename)
+        assertEquals(null, viewModel.uiState.value.library.clipboard)
+    }
+
     private fun kotlinx.coroutines.test.TestScope.observedViewModel(): MainViewModel {
         val viewModel = MainViewModel(settings, library)
         backgroundScope.launch(UnconfinedTestDispatcher(testScheduler)) { viewModel.uiState.collect {} }
@@ -154,6 +187,8 @@ private class FakeScoreLibraryRepository : ScoreLibraryRepository {
     var listing = DirectoryListing("content://scores", "Scores", emptyList())
     val listings = mutableMapOf<String, DirectoryListing>()
     var lastCopy: Triple<String, String, String>? = null
+    var lastCreateDirectory: Triple<String, String, String>? = null
+    var lastRename: Triple<String, String, String>? = null
 
     override suspend fun findScores(treeUri: String): List<ScoreDocument> {
         failure?.let { throw it }
@@ -166,6 +201,16 @@ private class FakeScoreLibraryRepository : ScoreLibraryRepository {
     }
 
     override suspend fun deleteEntry(treeUri: String, entryUri: String) = Result.success(Unit)
+
+    override suspend fun createDirectory(treeUri: String, parentDirectoryUri: String, name: String): Result<Unit> {
+        lastCreateDirectory = Triple(treeUri, parentDirectoryUri, name)
+        return Result.success(Unit)
+    }
+
+    override suspend fun renameEntry(treeUri: String, entryUri: String, name: String): Result<Unit> {
+        lastRename = Triple(treeUri, entryUri, name)
+        return Result.success(Unit)
+    }
 
     override suspend fun copyEntry(treeUri: String, entryUri: String, destinationDirectoryUri: String): Result<Unit> {
         lastCopy = Triple(treeUri, entryUri, destinationDirectoryUri)

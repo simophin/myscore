@@ -93,6 +93,8 @@ fun MyScoreApp(
     onMove: (LibraryEntry) -> Unit,
     onPaste: () -> Unit,
     onClearClipboard: () -> Unit,
+    onCreateFolder: (String) -> Unit,
+    onRename: (LibraryEntry, String) -> Unit,
     onDelete: (LibraryEntry) -> Unit,
 ) {
     var selectedTab by remember { mutableStateOf(AppTab.Scores) }
@@ -161,6 +163,8 @@ fun MyScoreApp(
                     onMove = onMove,
                     onPaste = onPaste,
                     onClearClipboard = onClearClipboard,
+                    onCreateFolder = onCreateFolder,
+                    onRename = onRename,
                     onDelete = onDelete,
                 )
                 AppTab.Find -> FindScreen(
@@ -195,6 +199,8 @@ private fun ScoresScreen(
     onMove: (LibraryEntry) -> Unit,
     onPaste: () -> Unit,
     onClearClipboard: () -> Unit,
+    onCreateFolder: (String) -> Unit,
+    onRename: (LibraryEntry, String) -> Unit,
     onDelete: (LibraryEntry) -> Unit,
 ) {
     when {
@@ -220,6 +226,8 @@ private fun ScoresScreen(
             onMove = onMove,
             onPaste = onPaste,
             onClearClipboard = onClearClipboard,
+            onCreateFolder = onCreateFolder,
+            onRename = onRename,
             onDelete = onDelete,
         )
     }
@@ -238,9 +246,13 @@ private fun FileBrowser(
     onMove: (LibraryEntry) -> Unit,
     onPaste: () -> Unit,
     onClearClipboard: () -> Unit,
+    onCreateFolder: (String) -> Unit,
+    onRename: (LibraryEntry, String) -> Unit,
     onDelete: (LibraryEntry) -> Unit,
 ) {
     var pendingDelete by remember { mutableStateOf<LibraryEntry?>(null) }
+    var pendingRename by remember { mutableStateOf<LibraryEntry?>(null) }
+    var creatingFolder by remember { mutableStateOf(false) }
     BackHandler(enabled = state.path.size > 1, onBack = onNavigateUp)
     Column(modifier.fillMaxSize()) {
         Row(
@@ -261,6 +273,7 @@ private fun FileBrowser(
                     }
                 }
             }
+            TextButton(onClick = { creatingFolder = true }, enabled = !state.loading) { Text("New folder") }
             IconButton(onClick = onRefresh) { Text("↻", style = MaterialTheme.typography.titleLarge) }
         }
         state.clipboard?.let { clipboard ->
@@ -316,6 +329,7 @@ private fun FileBrowser(
                             },
                             onCopy = { onCopy(entry) },
                             onMove = { onMove(entry) },
+                            onRename = { pendingRename = entry },
                             onDelete = { pendingDelete = entry },
                         )
                     }
@@ -339,6 +353,61 @@ private fun FileBrowser(
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } },
         )
     }
+    if (creatingFolder) {
+        NameDialog(
+            title = "Create folder",
+            initialName = "",
+            confirmLabel = "Create",
+            onDismiss = { creatingFolder = false },
+            onConfirm = { name ->
+                creatingFolder = false
+                onCreateFolder(name)
+            },
+        )
+    }
+    pendingRename?.let { entry ->
+        NameDialog(
+            title = "Rename ${entry.name}",
+            initialName = entry.name,
+            confirmLabel = "Rename",
+            onDismiss = { pendingRename = null },
+            onConfirm = { name ->
+                pendingRename = null
+                onRename(entry, name)
+            },
+        )
+    }
+}
+
+@Composable
+private fun NameDialog(
+    title: String,
+    initialName: String,
+    confirmLabel: String,
+    onDismiss: () -> Unit,
+    onConfirm: (String) -> Unit,
+) {
+    var name by remember(initialName) { mutableStateOf(initialName) }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            OutlinedTextField(
+                value = name,
+                onValueChange = { name = it },
+                label = { Text("Name") },
+                singleLine = true,
+                keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Done),
+                keyboardActions = KeyboardActions(onDone = {
+                    if (name.isNotBlank()) onConfirm(name)
+                }),
+            )
+        },
+        confirmButton = {
+            TextButton(onClick = { onConfirm(name) }, enabled = name.isNotBlank()) { Text(confirmLabel) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Cancel") } },
+    )
 }
 
 @Composable
@@ -347,6 +416,7 @@ private fun FileRow(
     onOpen: () -> Unit,
     onCopy: () -> Unit,
     onMove: () -> Unit,
+    onRename: () -> Unit,
     onDelete: () -> Unit,
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
@@ -373,6 +443,7 @@ private fun FileRow(
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                     DropdownMenuItem(text = { Text("Copy") }, onClick = { menuExpanded = false; onCopy() })
                     DropdownMenuItem(text = { Text("Move") }, onClick = { menuExpanded = false; onMove() })
+                    DropdownMenuItem(text = { Text("Rename") }, onClick = { menuExpanded = false; onRename() })
                     DropdownMenuItem(text = { Text("Delete") }, onClick = { menuExpanded = false; onDelete() })
                 }
             }
