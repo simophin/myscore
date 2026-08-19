@@ -87,7 +87,6 @@ class MainActivity : ComponentActivity() {
                             onOpenScore = { selectedScore = it },
                             onOpenDirectory = viewModel::openDirectory,
                             onNavigateUp = viewModel::navigateUp,
-                            onNavigateToPath = viewModel::navigateToPath,
                             onCopy = viewModel::stageCopy,
                             onMove = viewModel::stageMove,
                             onPaste = viewModel::paste,

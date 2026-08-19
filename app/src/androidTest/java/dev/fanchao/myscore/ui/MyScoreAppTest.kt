@@ -3,6 +3,7 @@ package dev.fanchao.myscore.ui
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTextInput
@@ -45,7 +46,6 @@ class MyScoreAppTest {
                     onOpenScore = { selected = it },
                     onOpenDirectory = {},
                     onNavigateUp = {},
-                    onNavigateToPath = {},
                     onCopy = {},
                     onMove = {},
                     onPaste = {},
@@ -76,7 +76,6 @@ class MyScoreAppTest {
                     onOpenScore = {},
                     onOpenDirectory = {},
                     onNavigateUp = {},
-                    onNavigateToPath = {},
                     onCopy = {},
                     onMove = {},
                     onPaste = {},
@@ -114,7 +113,6 @@ class MyScoreAppTest {
                     onOpenScore = {},
                     onOpenDirectory = {},
                     onNavigateUp = {},
-                    onNavigateToPath = {},
                     onCopy = {},
                     onMove = {},
                     onPaste = {},
@@ -147,7 +145,6 @@ class MyScoreAppTest {
                     onOpenScore = {},
                     onOpenDirectory = {},
                     onNavigateUp = {},
-                    onNavigateToPath = {},
                     onCopy = {},
                     onMove = {},
                     onPaste = {},
@@ -187,7 +184,6 @@ class MyScoreAppTest {
                     onOpenScore = {},
                     onOpenDirectory = {},
                     onNavigateUp = {},
-                    onNavigateToPath = {},
                     onCopy = {},
                     onMove = {},
                     onPaste = {},
@@ -199,15 +195,84 @@ class MyScoreAppTest {
             }
         }
 
+        composeRule.onNodeWithContentDescription("Score actions").performClick()
         composeRule.onNodeWithText("New folder").performClick()
         composeRule.onNode(hasSetTextAction()).performTextInput("Concertos")
         composeRule.onNodeWithText("Create").performClick()
         composeRule.runOnIdle { assertEquals("Concertos", createdFolder) }
 
-        composeRule.onNodeWithText("⋮").performClick()
+        composeRule.onNodeWithContentDescription("Actions for Bach.pdf").performClick()
         composeRule.onNodeWithText("Rename").performClick()
         composeRule.onNode(hasSetTextAction()).performTextReplacement("Prelude.pdf")
         composeRule.onNodeWithText("Rename").performClick()
         composeRule.runOnIdle { assertEquals(score to "Prelude.pdf", renamedEntry) }
+    }
+
+    @Test
+    fun scoreBrowserMovesFolderAndRefreshStateIntoTheAppBar() {
+        var refreshes = 0
+        composeRule.setContent {
+            MyScoreTheme {
+                MyScoreApp(
+                    libraryUri = android.net.Uri.parse("content://library"),
+                    libraryState = LibraryUiState(
+                        initialized = true,
+                        path = listOf(dev.fanchao.myscore.FolderLocation("content://library/concertos", "Concertos")),
+                    ),
+                    onChooseFolder = {},
+                    onImportPdf = {},
+                    onDownloadPdf = { _, _, _, _, _ -> },
+                    onOpenDownloadedScore = {},
+                    onRefresh = { refreshes++ },
+                    onOpenScore = {},
+                    onOpenDirectory = {},
+                    onNavigateUp = {},
+                    onCopy = {},
+                    onMove = {},
+                    onPaste = {},
+                    onClearClipboard = {},
+                    onCreateFolder = {},
+                    onRename = { _, _ -> },
+                    onDelete = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Concertos").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Refresh scores").performClick()
+        composeRule.runOnIdle { assertEquals(1, refreshes) }
+    }
+
+    @Test
+    fun findSearchOpensAsAnAppBarDialog() {
+        composeRule.setContent {
+            MyScoreTheme {
+                MyScoreApp(
+                    libraryUri = null,
+                    libraryState = LibraryUiState(),
+                    onChooseFolder = {},
+                    onImportPdf = {},
+                    onDownloadPdf = { _, _, _, _, _ -> },
+                    onOpenDownloadedScore = {},
+                    onRefresh = {},
+                    onOpenScore = {},
+                    onOpenDirectory = {},
+                    onNavigateUp = {},
+                    onCopy = {},
+                    onMove = {},
+                    onPaste = {},
+                    onClearClipboard = {},
+                    onCreateFolder = {},
+                    onRename = { _, _ -> },
+                    onDelete = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Find").performClick()
+        composeRule.onNodeWithContentDescription("Search IMSLP").performClick()
+        composeRule.onNodeWithText("Search IMSLP").assertIsDisplayed()
+        composeRule.onNode(hasSetTextAction()).performTextInput("Bach cello suites")
+        composeRule.onNodeWithText("Search").performClick()
     }
 }
