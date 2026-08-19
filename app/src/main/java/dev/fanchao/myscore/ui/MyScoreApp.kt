@@ -4,7 +4,6 @@ import android.annotation.SuppressLint
 import android.content.Intent
 import android.net.Uri
 import androidx.compose.foundation.clickable
-import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -18,16 +17,12 @@ import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.widthIn
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.text.KeyboardActions
-import androidx.compose.animation.AnimatedVisibility
-import androidx.compose.animation.fadeIn
-import androidx.compose.animation.fadeOut
-import androidx.compose.animation.slideInVertically
-import androidx.compose.animation.slideOutVertically
 import androidx.compose.material3.Button
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Card
@@ -64,6 +59,8 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.compose.ui.platform.LocalWindowInfo
+import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.semantics
 import dev.fanchao.myscore.LibraryUiState
 import dev.fanchao.myscore.FileTransferMode
 import dev.fanchao.myscore.data.ScoreDocument
@@ -90,7 +87,6 @@ fun MyScoreApp(
     onOpenScore: (ScoreDocument) -> Unit,
     onOpenDirectory: (LibraryEntry) -> Unit,
     onNavigateUp: () -> Unit,
-    onNavigateToPath: (Int) -> Unit,
     onCopy: (LibraryEntry) -> Unit,
     onMove: (LibraryEntry) -> Unit,
     onPaste: () -> Unit,
@@ -100,6 +96,9 @@ fun MyScoreApp(
     onDelete: (LibraryEntry) -> Unit,
 ) {
     var selectedTab by rememberSaveable { mutableStateOf(AppTab.Scores) }
+    var creatingFolder by rememberSaveable { mutableStateOf(false) }
+    var scoreActionsExpanded by remember { mutableStateOf(false) }
+    var findSearchVisible by rememberSaveable { mutableStateOf(false) }
     BackHandler(enabled = selectedTab != AppTab.Scores) {
         selectedTab = AppTab.Scores
     }
@@ -127,10 +126,78 @@ fun MyScoreApp(
                         Column {
                             Text("MyScore", fontWeight = FontWeight.SemiBold)
                             Text(
-                                selectedTab.label,
+                                if (selectedTab == AppTab.Scores) {
+                                    libraryState.path.lastOrNull()?.name ?: selectedTab.label
+                                } else {
+                                    selectedTab.label
+                                },
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                             )
+                        }
+                    },
+                    navigationIcon = {
+                        if (selectedTab == AppTab.Scores && libraryState.path.size > 1) {
+                            IconButton(onClick = onNavigateUp) {
+                                Text(
+                                    "‹",
+                                    modifier = Modifier.semantics { contentDescription = "Back to parent folder" },
+                                    style = MaterialTheme.typography.headlineMedium,
+                                )
+                            }
+                        }
+                    },
+                    actions = {
+                        when (selectedTab) {
+                            AppTab.Scores -> if (libraryUri != null) {
+                                if (libraryState.loading) {
+                                    CircularProgressIndicator(
+                                        modifier = Modifier
+                                            .padding(horizontal = 12.dp)
+                                            .size(24.dp)
+                                            .semantics { contentDescription = "Loading scores" },
+                                        strokeWidth = 2.dp,
+                                    )
+                                } else {
+                                    IconButton(onClick = onRefresh) {
+                                        Text(
+                                            "↻",
+                                            modifier = Modifier.semantics { contentDescription = "Refresh scores" },
+                                            style = MaterialTheme.typography.titleLarge,
+                                        )
+                                    }
+                                }
+                                Box {
+                                    IconButton(onClick = { scoreActionsExpanded = true }) {
+                                        Text(
+                                            "⋮",
+                                            modifier = Modifier.semantics { contentDescription = "Score actions" },
+                                            style = MaterialTheme.typography.titleLarge,
+                                        )
+                                    }
+                                    DropdownMenu(
+                                        expanded = scoreActionsExpanded,
+                                        onDismissRequest = { scoreActionsExpanded = false },
+                                    ) {
+                                        DropdownMenuItem(
+                                            text = { Text("New folder") },
+                                            enabled = !libraryState.loading,
+                                            onClick = {
+                                                scoreActionsExpanded = false
+                                                creatingFolder = true
+                                            },
+                                        )
+                                    }
+                                }
+                            }
+                            AppTab.Find -> IconButton(onClick = { findSearchVisible = true }) {
+                                Text(
+                                    "⌕",
+                                    modifier = Modifier.semantics { contentDescription = "Search IMSLP" },
+                                    style = MaterialTheme.typography.titleLarge,
+                                )
+                            }
+                            AppTab.Settings -> Unit
                         }
                     },
                     colors = TopAppBarDefaults.topAppBarColors(
@@ -159,16 +226,13 @@ fun MyScoreApp(
                     libraryUri = libraryUri,
                     state = libraryState,
                     onChooseFolder = onChooseFolder,
-                    onRefresh = onRefresh,
                     onOpenScore = onOpenScore,
                     onOpenDirectory = onOpenDirectory,
                     onNavigateUp = onNavigateUp,
-                    onNavigateToPath = onNavigateToPath,
                     onCopy = onCopy,
                     onMove = onMove,
                     onPaste = onPaste,
                     onClearClipboard = onClearClipboard,
-                    onCreateFolder = onCreateFolder,
                     onRename = onRename,
                     onDelete = onDelete,
                 )
@@ -178,6 +242,8 @@ fun MyScoreApp(
                     state = libraryState,
                     onDownloadPdf = onDownloadPdf,
                     onOpenDownloadedScore = onOpenDownloadedScore,
+                    searchVisible = findSearchVisible,
+                    onDismissSearch = { findSearchVisible = false },
                 )
                 AppTab.Settings -> SettingsScreen(
                     modifier = Modifier.padding(padding),
@@ -188,6 +254,18 @@ fun MyScoreApp(
             }
         }
     }
+    if (creatingFolder) {
+        NameDialog(
+            title = "Create folder",
+            initialName = "",
+            confirmLabel = "Create",
+            onDismiss = { creatingFolder = false },
+            onConfirm = { name ->
+                creatingFolder = false
+                onCreateFolder(name)
+            },
+        )
+    }
 }
 
 @Composable
@@ -196,16 +274,13 @@ private fun ScoresScreen(
     libraryUri: Uri?,
     state: LibraryUiState,
     onChooseFolder: () -> Unit,
-    onRefresh: () -> Unit,
     onOpenScore: (ScoreDocument) -> Unit,
     onOpenDirectory: (LibraryEntry) -> Unit,
     onNavigateUp: () -> Unit,
-    onNavigateToPath: (Int) -> Unit,
     onCopy: (LibraryEntry) -> Unit,
     onMove: (LibraryEntry) -> Unit,
     onPaste: () -> Unit,
     onClearClipboard: () -> Unit,
-    onCreateFolder: (String) -> Unit,
     onRename: (LibraryEntry, String) -> Unit,
     onDelete: (LibraryEntry) -> Unit,
 ) {
@@ -217,22 +292,16 @@ private fun ScoresScreen(
             action = "Choose folder",
             onAction = onChooseFolder,
         )
-        state.loading && !state.initialized -> Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-            CircularProgressIndicator()
-        }
         else -> FileBrowser(
             modifier = modifier,
             state = state,
-            onRefresh = onRefresh,
             onOpenScore = onOpenScore,
             onOpenDirectory = onOpenDirectory,
             onNavigateUp = onNavigateUp,
-            onNavigateToPath = onNavigateToPath,
             onCopy = onCopy,
             onMove = onMove,
             onPaste = onPaste,
             onClearClipboard = onClearClipboard,
-            onCreateFolder = onCreateFolder,
             onRename = onRename,
             onDelete = onDelete,
         )
@@ -243,45 +312,20 @@ private fun ScoresScreen(
 private fun FileBrowser(
     modifier: Modifier,
     state: LibraryUiState,
-    onRefresh: () -> Unit,
     onOpenScore: (ScoreDocument) -> Unit,
     onOpenDirectory: (LibraryEntry) -> Unit,
     onNavigateUp: () -> Unit,
-    onNavigateToPath: (Int) -> Unit,
     onCopy: (LibraryEntry) -> Unit,
     onMove: (LibraryEntry) -> Unit,
     onPaste: () -> Unit,
     onClearClipboard: () -> Unit,
-    onCreateFolder: (String) -> Unit,
     onRename: (LibraryEntry, String) -> Unit,
     onDelete: (LibraryEntry) -> Unit,
 ) {
     var pendingDelete by remember { mutableStateOf<LibraryEntry?>(null) }
     var pendingRename by remember { mutableStateOf<LibraryEntry?>(null) }
-    var creatingFolder by remember { mutableStateOf(false) }
     BackHandler(enabled = state.path.size > 1, onBack = onNavigateUp)
     Column(modifier.fillMaxSize()) {
-        Row(
-            Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 6.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-            if (state.path.size > 1) {
-                IconButton(onClick = onNavigateUp) { Text("‹", style = MaterialTheme.typography.headlineMedium) }
-            }
-            Row(
-                Modifier.weight(1f).horizontalScroll(androidx.compose.foundation.rememberScrollState()),
-                verticalAlignment = Alignment.CenterVertically,
-            ) {
-                state.path.forEachIndexed { index, folder ->
-                    if (index > 0) Text("  /  ", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    TextButton(onClick = { onNavigateToPath(index) }, enabled = index != state.path.lastIndex) {
-                        Text(folder.name, maxLines = 1)
-                    }
-                }
-            }
-            TextButton(onClick = { creatingFolder = true }, enabled = !state.loading) { Text("New folder") }
-            IconButton(onClick = onRefresh) { Text("↻", style = MaterialTheme.typography.titleLarge) }
-        }
         state.clipboard?.let { clipboard ->
             Row(
                 Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 4.dp),
@@ -299,7 +343,6 @@ private fun FileBrowser(
                 Button(onClick = onPaste, enabled = !state.loading) { Text("Paste here") }
             }
         }
-        if (state.loading) CircularProgressIndicator(Modifier.align(Alignment.CenterHorizontally))
         state.message?.let { message ->
             Text(
                 message,
@@ -357,18 +400,6 @@ private fun FileBrowser(
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = { TextButton(onClick = { pendingDelete = null }) { Text("Cancel") } },
-        )
-    }
-    if (creatingFolder) {
-        NameDialog(
-            title = "Create folder",
-            initialName = "",
-            confirmLabel = "Create",
-            onDismiss = { creatingFolder = false },
-            onConfirm = { name ->
-                creatingFolder = false
-                onCreateFolder(name)
-            },
         )
     }
     pendingRename?.let { entry ->
@@ -445,7 +476,12 @@ private fun FileRow(
                 )
             }
             Box {
-                IconButton(onClick = { menuExpanded = true }) { Text("⋮", style = MaterialTheme.typography.titleLarge) }
+                IconButton(
+                    onClick = { menuExpanded = true },
+                    modifier = Modifier.semantics { contentDescription = "Actions for ${entry.name}" },
+                ) {
+                    Text("⋮", style = MaterialTheme.typography.titleLarge)
+                }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
                     DropdownMenuItem(text = { Text("Copy") }, onClick = { menuExpanded = false; onCopy() })
                     DropdownMenuItem(text = { Text("Move") }, onClick = { menuExpanded = false; onMove() })
@@ -471,77 +507,51 @@ private fun FindScreen(
     state: LibraryUiState,
     onDownloadPdf: (String, String?, String?, String?, String?) -> Unit,
     onOpenDownloadedScore: (ScoreDocument) -> Unit,
+    searchVisible: Boolean,
+    onDismissSearch: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var webView by remember { mutableStateOf<android.webkit.WebView?>(null) }
     var canNavigateBack by remember { mutableStateOf(false) }
-    var controlsVisible by remember { mutableStateOf(true) }
     BackHandler(enabled = canNavigateBack) {
         webView?.let { view ->
             if (view.canGoBack()) view.goBack()
             canNavigateBack = view.canGoBack()
         }
     }
-    val searchUrl = {
+    fun submitSearch() {
         val encoded = URLEncoder.encode(query.trim(), StandardCharsets.UTF_8.toString())
-        "https://imslp.org/index.php?search=$encoded&title=Special%3ASearch&go=Go"
+        webView?.loadUrl("https://imslp.org/index.php?search=$encoded&title=Special%3ASearch&go=Go")
+        onDismissSearch()
     }
-    Column(
-        modifier = modifier.fillMaxSize(),
-    ) {
-        AnimatedVisibility(
-            visible = controlsVisible,
-            enter = slideInVertically { -it } + fadeIn(),
-            exit = slideOutVertically { -it } + fadeOut(),
-        ) {
-            Column {
-                Row(
-                    Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 8.dp),
-                    horizontalArrangement = Arrangement.spacedBy(8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    OutlinedTextField(
-                        value = query,
-                        onValueChange = { query = it },
-                        modifier = Modifier.weight(1f),
-                        label = { Text("Search IMSLP") },
-                        singleLine = true,
-                        keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
-                        keyboardActions = KeyboardActions(onSearch = {
-                            if (query.isNotBlank()) webView?.loadUrl(searchUrl())
-                        }),
-                    )
-                    Button(onClick = { webView?.loadUrl(searchUrl()) }, enabled = query.isNotBlank()) { Text("Go") }
-                }
-                if (state.message != null) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
-                        verticalAlignment = Alignment.CenterVertically,
-                    ) {
-                        Text(
-                            state.message,
-                            modifier = Modifier.weight(1f),
-                            color = if (state.message.contains("failed", true)) MaterialTheme.colorScheme.error
-                            else MaterialTheme.colorScheme.primary,
-                            style = MaterialTheme.typography.labelLarge,
-                        )
-                        state.downloadedScore
-                            ?.takeIf { state.message == "${it.fileName} downloaded" }
-                            ?.let { downloaded ->
-                                TextButton(onClick = { onOpenDownloadedScore(downloaded.document) }) {
-                                    Text("Open")
-                                }
-                            }
+    Column(modifier = modifier.fillMaxSize()) {
+        if (state.message != null) {
+            Row(
+                modifier = Modifier.fillMaxWidth().padding(start = 16.dp, end = 8.dp, top = 4.dp, bottom = 4.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Text(
+                    state.message,
+                    modifier = Modifier.weight(1f),
+                    color = if (state.message.contains("failed", true)) MaterialTheme.colorScheme.error
+                    else MaterialTheme.colorScheme.primary,
+                    style = MaterialTheme.typography.labelLarge,
+                )
+                state.downloadedScore
+                    ?.takeIf { state.message == "${it.fileName} downloaded" }
+                    ?.let { downloaded ->
+                        TextButton(onClick = { onOpenDownloadedScore(downloaded.document) }) {
+                            Text("Open")
+                        }
                     }
-                }
-                if (!hasLibrary) {
-                    Text(
-                        "Choose a score folder in Settings before downloading.",
-                        modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
-                        color = MaterialTheme.colorScheme.error,
-                    )
-                }
             }
+        }
+        if (!hasLibrary) {
+            Text(
+                "Choose a score folder in Settings before downloading.",
+                modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp),
+                color = MaterialTheme.colorScheme.error,
+            )
         }
         ImslpWebView(
             modifier = Modifier.fillMaxWidth().weight(1f),
@@ -551,7 +561,28 @@ private fun FindScreen(
             },
             onHistoryChanged = { canNavigateBack = it },
             onDownload = onDownloadPdf,
-            onScrollDirectionChanged = { scrollingDown -> controlsVisible = !scrollingDown },
+        )
+    }
+    if (searchVisible) {
+        AlertDialog(
+            onDismissRequest = onDismissSearch,
+            title = { Text("Search IMSLP") },
+            text = {
+                OutlinedTextField(
+                    value = query,
+                    onValueChange = { query = it },
+                    label = { Text("Composer, work, or catalogue number") },
+                    singleLine = true,
+                    keyboardOptions = androidx.compose.foundation.text.KeyboardOptions(imeAction = ImeAction.Search),
+                    keyboardActions = KeyboardActions(onSearch = {
+                        if (query.isNotBlank()) submitSearch()
+                    }),
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = ::submitSearch, enabled = query.isNotBlank()) { Text("Search") }
+            },
+            dismissButton = { TextButton(onClick = onDismissSearch) { Text("Cancel") } },
         )
     }
 }
@@ -563,7 +594,6 @@ private fun ImslpWebView(
     onReady: (android.webkit.WebView) -> Unit,
     onHistoryChanged: (canGoBack: Boolean) -> Unit,
     onDownload: (String, String?, String?, String?, String?) -> Unit,
-    onScrollDirectionChanged: (scrollingDown: Boolean) -> Unit,
 ) {
     AndroidView(
         modifier = modifier,
@@ -601,13 +631,6 @@ private fun ImslpWebView(
                                 true
                             }
                         }
-                    }
-                }
-                setOnScrollChangeListener { _, _, scrollY, _, oldScrollY ->
-                    when {
-                        scrollY == 0 -> onScrollDirectionChanged(false)
-                        scrollY - oldScrollY > 8 -> onScrollDirectionChanged(true)
-                        oldScrollY - scrollY > 8 -> onScrollDirectionChanged(false)
                     }
                 }
                 setDownloadListener { url, userAgent, contentDisposition, mimeType, _ ->
