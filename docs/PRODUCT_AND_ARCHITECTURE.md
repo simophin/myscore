@@ -44,6 +44,8 @@ IMSLP's documented API exposes paginated lists of people and works, but not a su
 
 Normal HTTP(S) navigation remains inside the Find WebView, including links to hosts used during IMSLP's navigation flow; only non-web URI schemes are delegated to Android. Pop-up windows are disabled. Scrolling down the page collapses the native search/status controls and scrolling up (or returning to the top) reveals them.
 
+System Back follows a single hierarchy: full-screen reader chrome, reader, Find WebView history, nested score folder, non-Scores top-level destination, then the activity. This keeps Back local to the most recently entered layer while top-level destinations remain peers rather than accumulating an unbounded tab history.
+
 We do not scrape catalogs or file URLs and do not bypass IMSLP's copyright/disclaimer flow. The UI reminds users that public-domain status varies by country. **Import PDF** remains as a fallback for files acquired elsewhere and lives in Settings with the other library-management actions.
 
 ### API-backed score sources
