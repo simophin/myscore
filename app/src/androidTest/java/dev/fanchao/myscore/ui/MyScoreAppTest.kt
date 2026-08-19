@@ -9,6 +9,7 @@ import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import dev.fanchao.myscore.LibraryUiState
 import dev.fanchao.myscore.data.ScoreDocument
+import dev.fanchao.myscore.data.DownloadedScore
 import dev.fanchao.myscore.data.LibraryEntry
 import dev.fanchao.myscore.ui.theme.MyScoreTheme
 import org.junit.Assert.assertEquals
@@ -38,6 +39,7 @@ class MyScoreAppTest {
                     onChooseFolder = {},
                     onImportPdf = {},
                     onDownloadPdf = { _, _, _, _, _ -> },
+                    onOpenDownloadedScore = {},
                     onRefresh = {},
                     onOpenScore = { selected = it },
                     onOpenDirectory = {},
@@ -68,6 +70,7 @@ class MyScoreAppTest {
                     onChooseFolder = {},
                     onImportPdf = {},
                     onDownloadPdf = { _, _, _, _, _ -> },
+                    onOpenDownloadedScore = {},
                     onRefresh = {},
                     onOpenScore = {},
                     onOpenDirectory = {},
@@ -91,6 +94,44 @@ class MyScoreAppTest {
     }
 
     @Test
+    fun completedDownloadOffersToOpenTheSavedScore() {
+        val score = ScoreDocument("content://library/new-score.pdf", "New score", 2_000, 0)
+        var opened: ScoreDocument? = null
+        composeRule.setContent {
+            MyScoreTheme {
+                MyScoreApp(
+                    libraryUri = android.net.Uri.parse("content://library"),
+                    libraryState = LibraryUiState(
+                        message = "New score.pdf downloaded",
+                        downloadedScore = DownloadedScore("New score.pdf", score),
+                    ),
+                    onChooseFolder = {},
+                    onImportPdf = {},
+                    onDownloadPdf = { _, _, _, _, _ -> },
+                    onOpenDownloadedScore = { opened = it },
+                    onRefresh = {},
+                    onOpenScore = {},
+                    onOpenDirectory = {},
+                    onNavigateUp = {},
+                    onNavigateToPath = {},
+                    onCopy = {},
+                    onMove = {},
+                    onPaste = {},
+                    onClearClipboard = {},
+                    onCreateFolder = {},
+                    onRename = { _, _ -> },
+                    onDelete = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Find").performClick()
+        composeRule.onNodeWithText("New score.pdf downloaded").assertIsDisplayed()
+        composeRule.onNodeWithText("Open").performClick()
+        composeRule.runOnIdle { assertEquals(score, opened) }
+    }
+
+    @Test
     fun fileBrowserCreatesFoldersAndRenamesEntries() {
         val score = LibraryEntry("content://library/bach.pdf", "Bach.pdf", false, 1_500_000, 0)
         var createdFolder: String? = null
@@ -107,6 +148,7 @@ class MyScoreAppTest {
                     onChooseFolder = {},
                     onImportPdf = {},
                     onDownloadPdf = { _, _, _, _, _ -> },
+                    onOpenDownloadedScore = {},
                     onRefresh = {},
                     onOpenScore = {},
                     onOpenDirectory = {},

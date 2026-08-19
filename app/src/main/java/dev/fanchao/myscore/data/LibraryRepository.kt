@@ -20,6 +20,11 @@ data class ScoreDocument(
     val modifiedAtMillis: Long,
 )
 
+data class DownloadedScore(
+    val fileName: String,
+    val document: ScoreDocument,
+)
+
 data class LibraryEntry(
     val uri: String,
     val name: String,
@@ -50,7 +55,7 @@ interface ScoreLibraryRepository {
         mimeType: String?,
         cookies: String?,
         treeUri: String,
-    ): Result<String>
+    ): Result<DownloadedScore>
 }
 
 class AndroidScoreLibraryRepository(private val context: Context) : ScoreLibraryRepository {
@@ -202,7 +207,7 @@ class AndroidScoreLibraryRepository(private val context: Context) : ScoreLibrary
         mimeType: String?,
         cookies: String?,
         treeUri: String,
-    ): Result<String> = withContext(Dispatchers.IO) {
+    ): Result<DownloadedScore> = withContext(Dispatchers.IO) {
         runCatching {
             val treeUri = treeUri.toUri()
             val requestedUrl = URL(url)
@@ -243,7 +248,16 @@ class AndroidScoreLibraryRepository(private val context: Context) : ScoreLibrary
                     destination.delete()
                     throw failure
                 }
-                destination.name ?: fileName
+                val savedName = destination.name ?: fileName
+                DownloadedScore(
+                    fileName = savedName,
+                    document = ScoreDocument(
+                        uri = destination.uri.toString(),
+                        title = savedName.removeSuffix(".pdf").removeSuffix(".PDF"),
+                        sizeBytes = destination.length(),
+                        modifiedAtMillis = destination.lastModified(),
+                    ),
+                )
             } finally {
                 connection.disconnect()
             }

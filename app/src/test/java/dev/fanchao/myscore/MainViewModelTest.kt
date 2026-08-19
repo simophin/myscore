@@ -3,6 +3,7 @@ package dev.fanchao.myscore
 import dev.fanchao.myscore.data.ScoreDocument
 import dev.fanchao.myscore.data.ScoreLibraryRepository
 import dev.fanchao.myscore.data.DirectoryListing
+import dev.fanchao.myscore.data.DownloadedScore
 import dev.fanchao.myscore.data.LibraryEntry
 import dev.fanchao.myscore.data.UserSettingsRepository
 import dev.fanchao.myscore.data.PageLayoutPreference
@@ -61,6 +62,24 @@ class MainViewModelTest {
 
         assertEquals("Choose a score folder before downloading", viewModel.uiState.value.library.message)
         assertEquals(0, library.downloadCount)
+    }
+
+    @Test
+    fun `successful download exposes the saved score for immediate opening`() = runTest {
+        settings.libraryUri.value = "content://scores"
+        val viewModel = observedViewModel()
+        advanceUntilIdle()
+
+        viewModel.downloadPdf("https://imslp.org/file.pdf", null, null, null, null)
+        advanceUntilIdle()
+
+        assertEquals("score.pdf downloaded", viewModel.uiState.value.library.message)
+        assertEquals("score.pdf", viewModel.uiState.value.library.downloadedScore?.fileName)
+        assertEquals(
+            ScoreDocument("content://scores/score.pdf", "score", 100, 0),
+            viewModel.uiState.value.library.downloadedScore?.document,
+        )
+        assertFalse(viewModel.uiState.value.library.downloading)
     }
 
     @Test
@@ -229,8 +248,13 @@ private class FakeScoreLibraryRepository : ScoreLibraryRepository {
         mimeType: String?,
         cookies: String?,
         treeUri: String,
-    ): Result<String> {
+    ): Result<DownloadedScore> {
         downloadCount++
-        return Result.success("score.pdf")
+        return Result.success(
+            DownloadedScore(
+                fileName = "score.pdf",
+                document = ScoreDocument("content://scores/score.pdf", "score", 100, 0),
+            ),
+        )
     }
 }
