@@ -2,8 +2,9 @@ package dev.fanchao.myscore.ui
 
 import android.annotation.SuppressLint
 import android.content.Intent
+import android.graphics.pdf.PdfRenderer
 import android.net.Uri
-import androidx.compose.foundation.clickable
+import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
@@ -45,6 +46,7 @@ import androidx.compose.material3.TextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -53,6 +55,7 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -67,6 +70,10 @@ import dev.fanchao.myscore.data.ScoreDocument
 import dev.fanchao.myscore.data.LibraryEntry
 import java.net.URLEncoder
 import java.nio.charset.StandardCharsets
+import java.text.DateFormat
+import java.util.Date
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private enum class AppTab(val label: String, val symbol: String) {
     Scores("Scores", "♫"),
@@ -324,6 +331,7 @@ private fun FileBrowser(
 ) {
     var pendingDelete by remember { mutableStateOf<LibraryEntry?>(null) }
     var pendingRename by remember { mutableStateOf<LibraryEntry?>(null) }
+    var pendingDetails by remember { mutableStateOf<LibraryEntry?>(null) }
     BackHandler(enabled = state.path.size > 1, onBack = onNavigateUp)
     Column(modifier.fillMaxSize()) {
         state.clipboard?.let { clipboard ->
@@ -376,6 +384,7 @@ private fun FileBrowser(
                                 if (entry.isDirectory) onOpenDirectory(entry)
                                 else onOpenScore(entry.toScoreDocument())
                             },
+                            onShowDetails = { pendingDetails = entry },
                             onCopy = { onCopy(entry) },
                             onMove = { onMove(entry) },
                             onRename = { pendingRename = entry },
@@ -414,6 +423,9 @@ private fun FileBrowser(
             },
         )
     }
+    pendingDetails?.let { entry ->
+        FileDetailsDialog(entry = entry, onDismiss = { pendingDetails = null })
+    }
 }
 
 @Composable
@@ -451,6 +463,7 @@ private fun NameDialog(
 private fun FileRow(
     entry: LibraryEntry,
     onOpen: () -> Unit,
+    onShowDetails: () -> Unit,
     onCopy: () -> Unit,
     onMove: () -> Unit,
     onRename: () -> Unit,
@@ -458,7 +471,13 @@ private fun FileRow(
 ) {
     var menuExpanded by remember { mutableStateOf(false) }
     Card(
-        modifier = Modifier.fillMaxWidth().clickable(onClick = onOpen),
+        modifier = Modifier
+            .fillMaxWidth()
+            .combinedClickable(
+                onClick = onOpen,
+                onLongClickLabel = "Show details for ${entry.name}",
+                onLongClick = onShowDetails,
+            ),
         shape = RoundedCornerShape(12.dp),
         colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
     ) {
@@ -490,6 +509,80 @@ private fun FileRow(
                 }
             }
         }
+    }
+}
+
+private data class PdfProperties(
+    val pageCount: Int,
+    val firstPageWidth: Int?,
+    val firstPageHeight: Int?,
+)
+
+@Composable
+private fun FileDetailsDialog(entry: LibraryEntry, onDismiss: () -> Unit) {
+    val contentResolver = LocalContext.current.contentResolver
+    var pdfProperties by remember(entry.uri) { mutableStateOf<Result<PdfProperties>?>(null) }
+
+    LaunchedEffect(entry.uri, entry.isDirectory) {
+        if (!entry.isDirectory) {
+            pdfProperties = withContext(Dispatchers.IO) {
+                runCatching {
+                    val descriptor = requireNotNull(contentResolver.openFileDescriptor(Uri.parse(entry.uri), "r"))
+                    descriptor.use {
+                        PdfRenderer(it).use { renderer ->
+                            if (renderer.pageCount == 0) {
+                                PdfProperties(0, null, null)
+                            } else {
+                                renderer.openPage(0).use { page ->
+                                    PdfProperties(renderer.pageCount, page.width, page.height)
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("File details") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+                DetailRow("Name", entry.name)
+                DetailRow("Type", if (entry.isDirectory) "Folder" else "PDF document")
+                if (!entry.isDirectory) DetailRow("Size", formatFileSize(entry.sizeBytes))
+                DetailRow("Last modified", formatModifiedDate(entry.modifiedAtMillis))
+                if (!entry.isDirectory) {
+                    Text("PDF properties", style = MaterialTheme.typography.titleSmall)
+                    when {
+                        pdfProperties == null -> Text("Reading…", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        pdfProperties?.isFailure == true -> Text(
+                            "Unavailable",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        else -> pdfProperties?.getOrNull()?.let { properties ->
+                            DetailRow("Pages", properties.pageCount.toString())
+                            if (properties.firstPageWidth != null && properties.firstPageHeight != null) {
+                                DetailRow(
+                                    "First page size",
+                                    "${properties.firstPageWidth} × ${properties.firstPageHeight} pt",
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } },
+    )
+}
+
+@Composable
+private fun DetailRow(label: String, value: String) {
+    Column {
+        Text(label, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        Text(value, style = MaterialTheme.typography.bodyLarge)
     }
 }
 
@@ -709,4 +802,10 @@ private fun formatFileSize(bytes: Long): String = when {
     bytes >= 1_000_000 -> "%.1f MB".format(bytes / 1_000_000.0)
     bytes >= 1_000 -> "%.0f KB".format(bytes / 1_000.0)
     else -> "$bytes B"
+}
+
+private fun formatModifiedDate(millis: Long): String = if (millis > 0) {
+    DateFormat.getDateTimeInstance(DateFormat.MEDIUM, DateFormat.SHORT).format(Date(millis))
+} else {
+    "Unknown"
 }
