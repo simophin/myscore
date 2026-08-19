@@ -3,9 +3,11 @@ package dev.fanchao.myscore.ui
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.performTextInput
 import androidx.compose.ui.test.performTextReplacement
 import androidx.test.espresso.Espresso.pressBack
@@ -62,6 +64,47 @@ class MyScoreAppTest {
 
         composeRule.onNodeWithText("Bach Prelude.pdf").assertIsDisplayed().performClick()
         composeRule.runOnIdle { assertEquals(score, selected) }
+    }
+
+    @Test
+    fun longPressingScoreShowsFileDetails() {
+        composeRule.setContent {
+            MyScoreTheme {
+                MyScoreApp(
+                    libraryUri = android.net.Uri.parse("content://library"),
+                    libraryState = LibraryUiState(
+                        initialized = true,
+                        entries = listOf(
+                            LibraryEntry("content://library/bach.pdf", "Bach Prelude.pdf", false, 1_500_000, 0),
+                        ),
+                        path = listOf(dev.fanchao.myscore.FolderLocation("content://library", "Scores")),
+                    ),
+                    onChooseFolder = {},
+                    onImportPdf = {},
+                    onDownloadPdf = { _, _, _, _, _ -> },
+                    onOpenDownloadedScore = {},
+                    onRefresh = {},
+                    onOpenScore = {},
+                    onOpenDirectory = {},
+                    onNavigateUp = {},
+                    onCopy = {},
+                    onMove = {},
+                    onPaste = {},
+                    onClearClipboard = {},
+                    onCreateFolder = {},
+                    onRename = { _, _ -> },
+                    onDelete = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Bach Prelude.pdf").performTouchInput { longClick() }
+        composeRule.onNodeWithText("File details").assertIsDisplayed()
+        composeRule.onNodeWithText("Name").assertIsDisplayed()
+        composeRule.onNodeWithText("PDF document").assertIsDisplayed()
+        composeRule.onNodeWithText("Size").assertIsDisplayed()
+        composeRule.onNodeWithText("Last modified").assertIsDisplayed()
+        composeRule.onNodeWithText("PDF properties").assertIsDisplayed()
     }
 
     @Test
