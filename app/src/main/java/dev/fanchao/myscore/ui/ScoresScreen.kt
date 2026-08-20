@@ -61,6 +61,7 @@ internal fun ScoresScreen(
     modifier: Modifier,
     libraryUri: Uri?,
     state: LibraryUiState,
+    sortOrder: ScoreSortOrder,
     onChooseFolder: () -> Unit,
     onOpenScore: (ScoreDocument) -> Unit,
     onOpenDirectory: (LibraryEntry) -> Unit,
@@ -83,6 +84,7 @@ internal fun ScoresScreen(
         else -> FileBrowser(
             modifier = modifier,
             state = state,
+            sortOrder = sortOrder,
             onOpenScore = onOpenScore,
             onOpenDirectory = onOpenDirectory,
             onNavigateUp = onNavigateUp,
@@ -100,6 +102,7 @@ internal fun ScoresScreen(
 private fun FileBrowser(
     modifier: Modifier,
     state: LibraryUiState,
+    sortOrder: ScoreSortOrder,
     onOpenScore: (ScoreDocument) -> Unit,
     onOpenDirectory: (LibraryEntry) -> Unit,
     onNavigateUp: () -> Unit,
@@ -158,7 +161,7 @@ private fun FileBrowser(
                     horizontalArrangement = Arrangement.spacedBy(10.dp),
                     verticalArrangement = Arrangement.spacedBy(8.dp),
                 ) {
-                    items(state.entries, key = { it.uri }) { entry ->
+                    items(sortLibraryEntries(state.entries, sortOrder), key = { it.uri }) { entry ->
                         FileRow(
                             entry = entry,
                             onOpen = {
@@ -207,6 +210,31 @@ private fun FileBrowser(
     pendingDetails?.let { entry ->
         FileDetailsDialog(entry = entry, onDismiss = { pendingDetails = null })
     }
+}
+
+internal enum class ScoreSortOrder(val label: String) {
+    NameAscending("Name (A–Z)"),
+    NameDescending("Name (Z–A)"),
+    NewestFirst("Newest first"),
+    OldestFirst("Oldest first"),
+}
+
+internal fun sortLibraryEntries(
+    entries: List<LibraryEntry>,
+    sortOrder: ScoreSortOrder,
+): List<LibraryEntry> {
+    val selectedComparator = when (sortOrder) {
+        ScoreSortOrder.NameAscending -> compareBy(String.CASE_INSENSITIVE_ORDER, LibraryEntry::name)
+        ScoreSortOrder.NameDescending -> compareByDescending<LibraryEntry> { it.name.lowercase() }
+            .thenByDescending { it.name }
+        ScoreSortOrder.NewestFirst -> compareByDescending<LibraryEntry> { it.modifiedAtMillis }
+            .thenBy(String.CASE_INSENSITIVE_ORDER, LibraryEntry::name)
+        ScoreSortOrder.OldestFirst -> compareBy<LibraryEntry> { it.modifiedAtMillis }
+            .thenBy(String.CASE_INSENSITIVE_ORDER, LibraryEntry::name)
+    }
+    return entries.sortedWith(
+        compareByDescending<LibraryEntry> { it.isDirectory }.then(selectedComparator),
+    )
 }
 
 @Composable
