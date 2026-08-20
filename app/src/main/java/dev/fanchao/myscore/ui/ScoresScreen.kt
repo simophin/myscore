@@ -46,6 +46,7 @@ import androidx.compose.runtime.setValue
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
@@ -303,11 +304,19 @@ private fun FileRow(
             verticalAlignment = Alignment.CenterVertically,
         ) {
             EntryTypeIcon(isDirectory = entry.isDirectory)
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
+            Box(
+                modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
+                Text(
+                    " \n ",
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    color = Color.Transparent,
+                )
                 Text(
                     entry.name,
                     fontWeight = FontWeight.Medium,
-                    minLines = 2,
                     maxLines = 2,
                     overflow = TextOverflow.Ellipsis,
                 )
@@ -360,7 +369,7 @@ private fun FileRow(
 private fun EntryTypeIcon(isDirectory: Boolean) {
     Icon(
         painter = painterResource(
-            if (isDirectory) R.drawable.ic_folder_24 else R.drawable.ic_picture_as_pdf_24,
+            if (isDirectory) R.drawable.ic_folder_24 else R.drawable.ic_score_page_24,
         ),
         contentDescription = null,
         modifier = Modifier.size(32.dp),
