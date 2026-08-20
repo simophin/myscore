@@ -9,18 +9,23 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.remember
+import androidx.core.content.IntentCompat
+import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
 import dev.fanchao.myscore.data.ScoreDocument
 import dev.fanchao.myscore.ui.MyScoreNavigation
 import dev.fanchao.myscore.ui.theme.MyScoreTheme
 
 class MainActivity : ComponentActivity() {
-    private val intentScore = androidx.compose.runtime.mutableStateOf<dev.fanchao.myscore.data.ScoreDocument?>(null)
+    private val intentScore = androidx.compose.runtime.mutableStateOf<ScoreDocument?>(null)
+    private val pendingPdfImport = androidx.compose.runtime.mutableStateOf<Uri?>(null)
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        intentScore.value = scoreFromIntent(intent)
+        handleIntent(intent)
         enableEdgeToEdge()
         setContent {
             MyScoreTheme {
@@ -29,6 +34,7 @@ class MainActivity : ComponentActivity() {
                     MainViewModelFactory(app.settingsRepository, app.libraryRepository)
                 }
                 val viewModel: MainViewModel = viewModel(factory = factory)
+                val uiState by viewModel.uiState.collectAsStateWithLifecycle()
 
                 val folderPicker = rememberLauncherForActivityResult(
                     ActivityResultContracts.OpenDocumentTree(),
@@ -42,6 +48,15 @@ class MainActivity : ComponentActivity() {
                 val pdfPicker = rememberLauncherForActivityResult(
                     ActivityResultContracts.OpenDocument(),
                 ) { uri -> if (uri != null) viewModel.importPdf(uri.toString()) }
+
+                LaunchedEffect(pendingPdfImport.value, uiState.libraryUri) {
+                    val source = pendingPdfImport.value
+                    if (source != null && uiState.libraryUri != null) {
+                        pendingPdfImport.value = null
+                        consumeShareIntent()
+                        viewModel.importPdf(source.toString())
+                    }
+                }
 
                 MyScoreNavigation(
                     viewModel = viewModel,
@@ -57,15 +72,26 @@ class MainActivity : ComponentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
-        intentScore.value = scoreFromIntent(intent)
+        handleIntent(intent)
     }
 
-    private fun scoreFromIntent(intent: Intent?): ScoreDocument? {
-        val uri = when {
-            intent?.action == Intent.ACTION_VIEW && intent.type == "application/pdf" -> intent.data
-            intent?.data?.scheme == "myscore" -> intent.data?.getQueryParameter("uri")?.let(Uri::parse)
-            else -> null
-        } ?: return null
+    private fun handleIntent(intent: Intent?) {
+        intentScore.value = viewScoreFromIntent(intent)
+        sharedPdfFromIntent(intent)?.let { pendingPdfImport.value = it }
+    }
+
+    private fun consumeShareIntent() {
+        if (intent?.action != Intent.ACTION_SEND) return
+        intent.action = null
+        intent.removeExtra(Intent.EXTRA_STREAM)
+        intent.clipData = null
+    }
+
+    private fun viewScoreFromIntent(intent: Intent?): ScoreDocument? {
+        val uri = intent
+            ?.takeIf { it.action == Intent.ACTION_VIEW && it.type == PDF_MIME_TYPE }
+            ?.data
+            ?: return null
         val name = runCatching {
             contentResolver.query(uri, arrayOf(OpenableColumns.DISPLAY_NAME, OpenableColumns.SIZE), null, null, null)
         }.getOrNull()
@@ -81,5 +107,15 @@ class MainActivity : ComponentActivity() {
             sizeBytes = name.second,
             modifiedAtMillis = 0,
         )
+    }
+
+    private fun sharedPdfFromIntent(intent: Intent?): Uri? {
+        if (intent?.action != Intent.ACTION_SEND || intent.type != PDF_MIME_TYPE) return null
+        return IntentCompat.getParcelableExtra(intent, Intent.EXTRA_STREAM, Uri::class.java)
+            ?: intent.clipData?.takeIf { it.itemCount > 0 }?.getItemAt(0)?.uri
+    }
+
+    private companion object {
+        const val PDF_MIME_TYPE = "application/pdf"
     }
 }

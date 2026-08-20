@@ -83,6 +83,21 @@ class MainViewModelTest {
     }
 
     @Test
+    fun `import copies a shared PDF into the configured folder`() = runTest {
+        settings.libraryUri.value = "content://scores"
+        val viewModel = observedViewModel()
+        advanceUntilIdle()
+
+        viewModel.importPdf("content://sharing/bach.pdf")
+        advanceUntilIdle()
+
+        assertEquals(
+            "content://sharing/bach.pdf" to "content://scores",
+            library.lastImport,
+        )
+    }
+
+    @Test
     fun `reader page and last score are delegated to settings repository`() = runTest {
         val viewModel = observedViewModel()
 
@@ -208,6 +223,7 @@ private class FakeScoreLibraryRepository : ScoreLibraryRepository {
     var lastCopy: Triple<String, String, String>? = null
     var lastCreateDirectory: Triple<String, String, String>? = null
     var lastRename: Triple<String, String, String>? = null
+    var lastImport: Pair<String, String>? = null
 
     override suspend fun findScores(treeUri: String): List<ScoreDocument> {
         failure?.let { throw it }
@@ -239,7 +255,10 @@ private class FakeScoreLibraryRepository : ScoreLibraryRepository {
     override suspend fun moveEntry(treeUri: String, entryUri: String, destinationDirectoryUri: String) =
         Result.success(Unit)
 
-    override suspend fun importPdf(source: String, treeUri: String) = Result.success(Unit)
+    override suspend fun importPdf(source: String, treeUri: String): Result<Unit> {
+        lastImport = source to treeUri
+        return Result.success(Unit)
+    }
 
     override suspend fun downloadPdf(
         url: String,
