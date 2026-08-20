@@ -3,6 +3,7 @@ package dev.fanchao.myscore.ui
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.hasSetTextAction
 import androidx.compose.ui.test.junit4.v2.createComposeRule
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.longClick
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
@@ -14,10 +15,17 @@ import androidx.test.espresso.Espresso.pressBack
 import androidx.test.espresso.Espresso.onView
 import androidx.test.espresso.matcher.ViewMatchers.isAssignableFrom
 import dev.fanchao.myscore.LibraryUiState
+import dev.fanchao.myscore.MainViewModel
+import dev.fanchao.myscore.data.DirectoryListing
 import dev.fanchao.myscore.data.ScoreDocument
 import dev.fanchao.myscore.data.DownloadedScore
 import dev.fanchao.myscore.data.LibraryEntry
+import dev.fanchao.myscore.data.PageLayoutPreference
+import dev.fanchao.myscore.data.ScoreLibraryRepository
+import dev.fanchao.myscore.data.UserSettingsRepository
 import dev.fanchao.myscore.ui.theme.MyScoreTheme
+import kotlinx.coroutines.flow.Flow
+import kotlinx.coroutines.flow.MutableStateFlow
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
 import org.junit.Assert.assertTrue
@@ -138,6 +146,36 @@ class MyScoreAppTest {
         composeRule.onNodeWithText("Score library").assertIsDisplayed()
         composeRule.onNodeWithText("Choose folder").assertIsDisplayed()
         composeRule.onNodeWithText("Import an existing PDF").assertIsDisplayed()
+    }
+
+    @Test
+    fun navigationScreenUsesLatestLibraryUriAfterFolderSelection() {
+        val settings = NavigationFakeSettingsRepository()
+        val library = NavigationFakeScoreLibraryRepository()
+        val viewModel = MainViewModel(settings, library)
+
+        composeRule.setContent {
+            MyScoreTheme {
+                MyScoreNavigation(
+                    viewModel = viewModel,
+                    intentScore = null,
+                    onIntentScoreClosed = {},
+                    onChooseFolder = {},
+                    onImportPdf = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithText("Choose your score folder").assertIsDisplayed()
+        composeRule.runOnIdle {
+            viewModel.setLibraryFolder("content://com.android.externalstorage.documents/tree/primary%3ADocuments")
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("This folder is empty").fetchSemanticsNodes().isNotEmpty()
+        }
+        composeRule.waitUntil(timeoutMillis = 5_000) {
+            composeRule.onAllNodesWithText("Choose your score folder").fetchSemanticsNodes().isEmpty()
+        }
     }
 
     @Test
@@ -387,4 +425,64 @@ class MyScoreAppTest {
             assertSame(initialWebView, view)
         }
     }
+}
+
+private class NavigationFakeSettingsRepository : UserSettingsRepository {
+    override val libraryUri = MutableStateFlow<String?>(null)
+    override val lastScoreUri = MutableStateFlow<String?>(null)
+    private val pages = mutableMapOf<String, MutableStateFlow<Int>>()
+    private val layouts = mutableMapOf<String, MutableStateFlow<PageLayoutPreference>>()
+
+    override suspend fun setLibraryUri(uri: String) {
+        libraryUri.value = uri
+    }
+
+    override suspend fun setLastScoreUri(uri: String) {
+        lastScoreUri.value = uri
+    }
+
+    override fun readerPage(uri: String): Flow<Int> = pages.getOrPut(uri) { MutableStateFlow(0) }
+
+    override suspend fun setReaderPage(uri: String, page: Int) {
+        pages.getOrPut(uri) { MutableStateFlow(0) }.value = page
+    }
+
+    override fun readerLayout(uri: String): Flow<PageLayoutPreference> =
+        layouts.getOrPut(uri) { MutableStateFlow(PageLayoutPreference.Auto) }
+
+    override suspend fun setReaderLayout(uri: String, preference: PageLayoutPreference) {
+        layouts.getOrPut(uri) { MutableStateFlow(PageLayoutPreference.Auto) }.value = preference
+    }
+}
+
+private class NavigationFakeScoreLibraryRepository : ScoreLibraryRepository {
+    override suspend fun findScores(treeUri: String): List<ScoreDocument> = emptyList()
+
+    override suspend fun listDirectory(treeUri: String, directoryUri: String?): DirectoryListing =
+        DirectoryListing(treeUri, "Library", emptyList())
+
+    override suspend fun deleteEntry(treeUri: String, entryUri: String): Result<Unit> = Result.success(Unit)
+
+    override suspend fun createDirectory(treeUri: String, parentDirectoryUri: String, name: String): Result<Unit> =
+        Result.success(Unit)
+
+    override suspend fun renameEntry(treeUri: String, entryUri: String, name: String): Result<Unit> =
+        Result.success(Unit)
+
+    override suspend fun copyEntry(treeUri: String, entryUri: String, destinationDirectoryUri: String): Result<Unit> =
+        Result.success(Unit)
+
+    override suspend fun moveEntry(treeUri: String, entryUri: String, destinationDirectoryUri: String): Result<Unit> =
+        Result.success(Unit)
+
+    override suspend fun importPdf(source: String, treeUri: String): Result<Unit> = Result.success(Unit)
+
+    override suspend fun downloadPdf(
+        url: String,
+        userAgent: String?,
+        contentDisposition: String?,
+        mimeType: String?,
+        cookies: String?,
+        treeUri: String,
+    ): Result<DownloadedScore> = error("Downloads are not used in this test")
 }
