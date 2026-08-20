@@ -98,15 +98,13 @@ class MainViewModelTest {
     }
 
     @Test
-    fun `reader page and last score are delegated to settings repository`() = runTest {
+    fun `reader page is delegated to settings repository`() = runTest {
         val viewModel = observedViewModel()
 
         viewModel.saveReaderPage("content://scores/bach.pdf", 7)
-        viewModel.recordOpenedScore("content://scores/bach.pdf")
         advanceUntilIdle()
 
         assertEquals(7, settings.pages["content://scores/bach.pdf"]?.value)
-        assertEquals("content://scores/bach.pdf", settings.lastScoreUri.value)
     }
 
     @Test
@@ -208,13 +206,11 @@ class MainViewModelTest {
 
 private class FakeSettingsRepository : UserSettingsRepository {
     override val libraryUri = MutableStateFlow<String?>(null)
-    override val lastScoreUri = MutableStateFlow<String?>(null)
     override val paperModeEnabled = MutableStateFlow(false)
     val pages = mutableMapOf<String, MutableStateFlow<Int>>()
     val layouts = mutableMapOf<String, MutableStateFlow<PageLayoutPreference>>()
 
     override suspend fun setLibraryUri(uri: String) { libraryUri.value = uri }
-    override suspend fun setLastScoreUri(uri: String) { lastScoreUri.value = uri }
     override suspend fun setPaperModeEnabled(enabled: Boolean) { paperModeEnabled.value = enabled }
     override fun readerPage(uri: String): Flow<Int> = pages.getOrPut(uri) { MutableStateFlow(0) }
     override suspend fun setReaderPage(uri: String, page: Int) {

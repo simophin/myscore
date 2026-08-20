@@ -431,17 +431,12 @@ class MyScoreAppTest {
 
 private class NavigationFakeSettingsRepository : UserSettingsRepository {
     override val libraryUri = MutableStateFlow<String?>(null)
-    override val lastScoreUri = MutableStateFlow<String?>(null)
     override val paperModeEnabled = MutableStateFlow(false)
     private val pages = mutableMapOf<String, MutableStateFlow<Int>>()
     private val layouts = mutableMapOf<String, MutableStateFlow<PageLayoutPreference>>()
 
     override suspend fun setLibraryUri(uri: String) {
         libraryUri.value = uri
-    }
-
-    override suspend fun setLastScoreUri(uri: String) {
-        lastScoreUri.value = uri
     }
 
     override suspend fun setPaperModeEnabled(enabled: Boolean) {

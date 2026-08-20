@@ -7,10 +7,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
@@ -54,8 +51,6 @@ internal fun MyScoreNavigation(
     val uiState = uiStateState.value
     val libraryUri = uiState.libraryUri
     val libraryState = uiState.library
-    val lastScoreUri = uiState.lastScoreUri
-    var restoredLastScore by rememberSaveable { mutableStateOf(false) }
     val initialRoutes = remember {
         intentScore?.let { arrayOf<NavKey>(ScoresRoute, ScoreViewerRoute(it)) }
             ?: arrayOf<NavKey>(ScoresRoute)
@@ -79,15 +74,6 @@ internal fun MyScoreNavigation(
     LibraryChangeEffect(libraryUri?.let(Uri::parse)) { viewModel.refresh() }
     LaunchedEffect(intentScore) {
         intentScore?.let(navigateToScore)
-    }
-    LaunchedEffect(lastScoreUri, libraryState.initialized, libraryState.scores) {
-        if (!restoredLastScore && lastScoreUri != null && libraryState.initialized) {
-            if (backStack.size == 1) {
-                libraryState.scores.firstOrNull { it.uri == lastScoreUri }
-                    ?.let(navigateToScore)
-            }
-            restoredLastScore = true
-        }
     }
 
     NavDisplay(
@@ -124,7 +110,6 @@ internal fun MyScoreNavigation(
                 }
                 is ScoreViewerRoute -> NavEntry(route) {
                     val score = route.toScoreDocument()
-                    LaunchedEffect(score.uri) { viewModel.recordOpenedScore(score.uri) }
                     val rememberedPage by viewModel.readerPage(score.uri)
                         .collectAsStateWithLifecycle(initialValue = -1)
                     val pageLayout by viewModel.readerLayout(score.uri)
