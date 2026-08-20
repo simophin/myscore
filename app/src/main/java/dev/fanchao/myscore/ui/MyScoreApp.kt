@@ -117,22 +117,7 @@ fun MyScoreApp(
                     navigationIcon = {
                         if (selectedTab == AppTab.Scores && libraryState.path.size > 1) {
                             IconButton(onClick = onNavigateUp) {
-                                Text(
-                                    "‹",
-                                    modifier = Modifier.semantics { contentDescription = "Back to parent folder" },
-                                    style = MaterialTheme.typography.headlineMedium,
-                                )
-                            }
-                        } else if (selectedTab == AppTab.Find) {
-                            IconButton(
-                                onClick = findWebViewHolder::goBack,
-                                enabled = findWebViewState.canGoBack,
-                            ) {
-                                Text(
-                                    "‹",
-                                    modifier = Modifier.semantics { contentDescription = "Back in browser" },
-                                    style = MaterialTheme.typography.headlineMedium,
-                                )
+                                AppBarGlyph("‹", "Back to parent folder")
                             }
                         }
                     },
@@ -149,20 +134,12 @@ fun MyScoreApp(
                                     )
                                 } else {
                                     IconButton(onClick = onRefresh) {
-                                        Text(
-                                            "↻",
-                                            modifier = Modifier.semantics { contentDescription = "Refresh scores" },
-                                            style = MaterialTheme.typography.titleLarge,
-                                        )
+                                        AppBarGlyph("↻", "Refresh scores")
                                     }
                                 }
                                 Box {
                                     IconButton(onClick = { scoreActionsExpanded = true }) {
-                                        Text(
-                                            "⋮",
-                                            modifier = Modifier.semantics { contentDescription = "Score actions" },
-                                            style = MaterialTheme.typography.titleLarge,
-                                        )
+                                        AppBarGlyph("⋮", "Score actions")
                                     }
                                     DropdownMenu(
                                         expanded = scoreActionsExpanded,
@@ -201,41 +178,31 @@ fun MyScoreApp(
                             }
                             AppTab.Find -> {
                                 IconButton(
+                                    onClick = findWebViewHolder::goBack,
+                                    enabled = findWebViewState.canGoBack,
+                                ) {
+                                    AppBarGlyph("‹", "Back in browser")
+                                }
+                                IconButton(
                                     onClick = findWebViewHolder::goForward,
                                     enabled = findWebViewState.canGoForward,
                                 ) {
-                                    Text(
-                                        "›",
-                                        modifier = Modifier.semantics { contentDescription = "Forward in browser" },
-                                        style = MaterialTheme.typography.headlineMedium,
-                                    )
+                                    AppBarGlyph("›", "Forward in browser")
                                 }
                                 if (findWebViewState.isLoading) {
                                     IconButton(onClick = {
                                         findWebViewHolder.stopLoading()
                                         findWebViewState = findWebViewState.copy(isLoading = false)
                                     }) {
-                                        Text(
-                                            "■",
-                                            modifier = Modifier.semantics { contentDescription = "Stop loading page" },
-                                            style = MaterialTheme.typography.titleMedium,
-                                        )
+                                        AppBarGlyph("■", "Stop loading page")
                                     }
                                 } else {
                                     IconButton(onClick = findWebViewHolder::reload) {
-                                        Text(
-                                            "↻",
-                                            modifier = Modifier.semantics { contentDescription = "Refresh page" },
-                                            style = MaterialTheme.typography.titleLarge,
-                                        )
+                                        AppBarGlyph("↻", "Refresh page")
                                     }
                                 }
                                 IconButton(onClick = { findSearchVisible = true }) {
-                                    Text(
-                                        "⌕",
-                                        modifier = Modifier.semantics { contentDescription = "Search IMSLP" },
-                                        style = MaterialTheme.typography.titleLarge,
-                                    )
+                                    AppBarGlyph("⌕", "Search IMSLP")
                                 }
                             }
                             AppTab.Settings -> Unit
@@ -310,4 +277,13 @@ fun MyScoreApp(
             },
         )
     }
+}
+
+@Composable
+private fun AppBarGlyph(symbol: String, description: String) {
+    Text(
+        symbol,
+        modifier = Modifier.semantics { contentDescription = description },
+        style = MaterialTheme.typography.headlineLarge,
+    )
 }
