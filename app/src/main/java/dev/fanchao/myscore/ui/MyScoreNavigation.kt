@@ -103,8 +103,10 @@ internal fun MyScoreNavigation(
                     MyScoreApp(
                         libraryUri = currentLibraryUri?.let(Uri::parse),
                         libraryState = currentLibraryState,
+                        paperModeEnabled = currentUiState.paperModeEnabled,
                         onChooseFolder = { onChooseFolder(currentLibraryUri?.let(Uri::parse)) },
                         onImportPdf = onImportPdf,
+                        onPaperModeChanged = viewModel::savePaperModeEnabled,
                         onDownloadPdf = viewModel::downloadPdf,
                         onOpenDownloadedScore = navigateToScore,
                         onRefresh = viewModel::refresh,
@@ -127,6 +129,7 @@ internal fun MyScoreNavigation(
                         .collectAsStateWithLifecycle(initialValue = -1)
                     val pageLayout by viewModel.readerLayout(score.uri)
                         .collectAsStateWithLifecycle(initialValue = null)
+                    val paperModeEnabled = uiStateState.value.paperModeEnabled
                     if (rememberedPage < 0 || pageLayout == null) {
                         Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                             CircularProgressIndicator()
@@ -136,8 +139,10 @@ internal fun MyScoreNavigation(
                             score = score,
                             initialPage = rememberedPage,
                             layoutPreference = requireNotNull(pageLayout),
+                            paperModeEnabled = paperModeEnabled,
                             onPageChanged = { viewModel.saveReaderPage(score.uri, it) },
                             onLayoutPreferenceChanged = { viewModel.saveReaderLayout(score.uri, it) },
+                            onPaperModeChanged = viewModel::savePaperModeEnabled,
                             onBack = navigateBack,
                         )
                     }

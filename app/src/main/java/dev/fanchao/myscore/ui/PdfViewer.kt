@@ -34,6 +34,7 @@ import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.MaterialTheme
@@ -101,8 +102,10 @@ fun PdfViewer(
     score: ScoreDocument,
     initialPage: Int,
     layoutPreference: PageLayoutPreference,
+    paperModeEnabled: Boolean,
     onPageChanged: (Int) -> Unit,
     onLayoutPreferenceChanged: (PageLayoutPreference) -> Unit,
+    onPaperModeChanged: (Boolean) -> Unit,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
@@ -110,7 +113,7 @@ fun PdfViewer(
     var openPdf by remember(score.uri) { mutableStateOf<OpenPdf?>(null) }
     var error by remember(score.uri) { mutableStateOf<String?>(null) }
     var fullScreen by rememberSaveable(score.uri) { mutableStateOf(false) }
-    var layoutMenuExpanded by remember { mutableStateOf(false) }
+    var readerOptionsExpanded by remember { mutableStateOf(false) }
     var anchorPage by remember(score.uri) { mutableIntStateOf(initialPage) }
     ImmersiveSystemBars(fullScreen)
     BackHandler {
@@ -141,23 +144,59 @@ fun PdfViewer(
                     },
                     title = { Text(score.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     actions = {
-                        openPdf?.let { pdf -> Text("${pdf.renderer.pageCount} pages") }
                         Box {
                             IconButton(
-                                onClick = { layoutMenuExpanded = true },
+                                onClick = { readerOptionsExpanded = true },
                                 modifier = Modifier.semantics {
-                                    contentDescription = "Page layout: ${layoutPreference.label}"
+                                    contentDescription = "Reader options"
                                 },
                             ) {
                                 Icon(
-                                    painter = painterResource(R.drawable.ic_view_week_24),
+                                    painter = painterResource(R.drawable.ic_score_page_24),
                                     contentDescription = null,
                                 )
                             }
                             DropdownMenu(
-                                expanded = layoutMenuExpanded,
-                                onDismissRequest = { layoutMenuExpanded = false },
+                                expanded = readerOptionsExpanded,
+                                onDismissRequest = { readerOptionsExpanded = false },
                             ) {
+                                openPdf?.let { pdf ->
+                                    DropdownMenuItem(
+                                        leadingIcon = {
+                                            Icon(
+                                                painter = painterResource(R.drawable.ic_score_page_24),
+                                                contentDescription = null,
+                                            )
+                                        },
+                                        text = { Text("${pdf.renderer.pageCount} pages") },
+                                        enabled = false,
+                                        onClick = {},
+                                    )
+                                    HorizontalDivider()
+                                }
+                                DropdownMenuItem(
+                                    leadingIcon = {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_paper_mode_24),
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    trailingIcon = {
+                                        if (paperModeEnabled) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Check,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp),
+                                            )
+                                        }
+                                    },
+                                    text = { Text("Paper mode") },
+                                    onClick = {
+                                        readerOptionsExpanded = false
+                                        onPaperModeChanged(!paperModeEnabled)
+                                    },
+                                )
+                                HorizontalDivider()
                                 PageLayoutPreference.entries.forEach { preference ->
                                     DropdownMenuItem(
                                         leadingIcon = {
@@ -171,9 +210,17 @@ fun PdfViewer(
                                                 Spacer(Modifier.size(18.dp))
                                             }
                                         },
-                                        text = { Text(preference.label) },
+                                        text = {
+                                            Text(
+                                                when (preference) {
+                                                    PageLayoutPreference.Auto -> "Layout: Auto"
+                                                    PageLayoutPreference.Single -> "Layout: Single page"
+                                                    PageLayoutPreference.Two -> "Layout: Two pages"
+                                                },
+                                            )
+                                        },
                                         onClick = {
-                                            layoutMenuExpanded = false
+                                            readerOptionsExpanded = false
                                             onLayoutPreferenceChanged(preference)
                                         },
                                     )
@@ -245,6 +292,7 @@ fun PdfViewer(
                                     PdfPage(
                                         renderer = pdf.renderer,
                                         pageIndex = firstPage,
+                                        paperModeEnabled = paperModeEnabled,
                                         modifier = Modifier.weight(1f),
                                         onZoomChanged = { zoomed ->
                                             zoomedPageIndices = zoomedPageIndices.withZoomState(
@@ -260,6 +308,7 @@ fun PdfViewer(
                                         PdfPage(
                                             renderer = pdf.renderer,
                                             pageIndex = firstPage + 1,
+                                            paperModeEnabled = paperModeEnabled,
                                             modifier = Modifier.weight(1f),
                                             onZoomChanged = { zoomed ->
                                                 zoomedPageIndices = zoomedPageIndices.withZoomState(
@@ -340,10 +389,11 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 private fun PdfPage(
     renderer: PdfRenderer,
     pageIndex: Int,
+    paperModeEnabled: Boolean,
     modifier: Modifier = Modifier,
     onZoomChanged: (Boolean) -> Unit,
 ) {
-    val bitmap by produceState<Bitmap?>(initialValue = null, renderer, pageIndex) {
+    val bitmap by produceState<Bitmap?>(initialValue = null, renderer, pageIndex, paperModeEnabled) {
         value = withContext(Dispatchers.IO) {
             synchronized(renderer) {
                 renderer.openPage(pageIndex).use { page ->
@@ -351,8 +401,11 @@ private fun PdfPage(
                     val width = (page.width * scale).toInt().coerceAtLeast(1)
                     val height = (page.height * scale).toInt().coerceAtLeast(1)
                     createBitmap(width, height, Bitmap.Config.ARGB_8888).also { output ->
-                        output.eraseColor(Color.WHITE)
+                        output.eraseColor(if (paperModeEnabled) PAPER_COLOR else Color.WHITE)
                         page.render(output, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        if (paperModeEnabled) {
+                            applyPaperMode(output)
+                        }
                     }
                 }
             }
@@ -561,3 +614,48 @@ private fun Set<Int>.withZoomState(pageIndex: Int, zoomed: Boolean): Set<Int> = 
     !zoomed && pageIndex in this -> this - pageIndex
     else -> this
 }
+
+private const val PAPER_COLOR = 0xFFF2E7C9.toInt()
+private const val PAPER_MIN_LIGHTNESS = 215
+private const val PAPER_MAX_CHROMA = 18
+private const val PAPER_MAX_BLEND = 0.92f
+
+private fun applyPaperMode(bitmap: Bitmap) {
+    val width = bitmap.width
+    val height = bitmap.height
+    val pixels = IntArray(width * height)
+    bitmap.getPixels(pixels, 0, width, 0, 0, width, height)
+    for (index in pixels.indices) {
+        pixels[index] = paperTonePixel(pixels[index], PAPER_COLOR)
+    }
+    bitmap.setPixels(pixels, 0, width, 0, 0, width, height)
+}
+
+internal fun paperTonePixel(pixel: Int, paperColor: Int): Int {
+    val alpha = pixel ushr 24 and 0xFF
+    if (alpha == 0) return pixel
+    val red = pixel ushr 16 and 0xFF
+    val green = pixel ushr 8 and 0xFF
+    val blue = pixel and 0xFF
+    val minChannel = minOf(red, green, blue)
+    val maxChannel = maxOf(red, green, blue)
+    if (minChannel < PAPER_MIN_LIGHTNESS || maxChannel - minChannel > PAPER_MAX_CHROMA) {
+        return pixel
+    }
+
+    val average = (red + green + blue) / 3f
+    val whiteness = ((average - PAPER_MIN_LIGHTNESS) / (255f - PAPER_MIN_LIGHTNESS))
+        .coerceIn(0f, 1f)
+    val blend = whiteness * PAPER_MAX_BLEND
+    val paperRed = paperColor ushr 16 and 0xFF
+    val paperGreen = paperColor ushr 8 and 0xFF
+    val paperBlue = paperColor and 0xFF
+
+    return (alpha shl 24) or
+        (blendChannel(red, paperRed, blend) shl 16) or
+        (blendChannel(green, paperGreen, blend) shl 8) or
+        blendChannel(blue, paperBlue, blend)
+}
+
+private fun blendChannel(source: Int, target: Int, amount: Float): Int =
+    (source + (target - source) * amount).toInt().coerceIn(0, 255)

@@ -6,8 +6,10 @@ import kotlinx.coroutines.flow.map
 interface UserSettingsRepository {
     val libraryUri: Flow<String?>
     val lastScoreUri: Flow<String?>
+    val paperModeEnabled: Flow<Boolean>
     suspend fun setLibraryUri(uri: String)
     suspend fun setLastScoreUri(uri: String)
+    suspend fun setPaperModeEnabled(enabled: Boolean)
     fun readerPage(uri: String): Flow<Int>
     suspend fun setReaderPage(uri: String, page: Int)
     fun readerLayout(uri: String): Flow<PageLayoutPreference>
@@ -30,12 +32,19 @@ class RoomUserSettingsRepository(private val dao: SettingsDao) : UserSettingsRep
 
     override val lastScoreUri: Flow<String?> = dao.observeConfig(LAST_SCORE_URI).map { it?.value }
 
+    override val paperModeEnabled: Flow<Boolean> =
+        dao.observeConfig(PAPER_MODE_ENABLED).map { it?.value == "true" }
+
     override suspend fun setLibraryUri(uri: String) {
         dao.upsertConfig(ConfigEntity(LIBRARY_URI, uri))
     }
 
     override suspend fun setLastScoreUri(uri: String) {
         dao.upsertConfig(ConfigEntity(LAST_SCORE_URI, uri))
+    }
+
+    override suspend fun setPaperModeEnabled(enabled: Boolean) {
+        dao.upsertConfig(ConfigEntity(PAPER_MODE_ENABLED, enabled.toString()))
     }
 
     override fun readerPage(uri: String): Flow<Int> =
@@ -55,5 +64,6 @@ class RoomUserSettingsRepository(private val dao: SettingsDao) : UserSettingsRep
     private companion object {
         const val LIBRARY_URI = "library_uri"
         const val LAST_SCORE_URI = "last_score_uri"
+        const val PAPER_MODE_ENABLED = "paper_mode_enabled"
     }
 }

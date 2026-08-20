@@ -42,6 +42,7 @@ data class MainUiState(
     val libraryUri: String? = null,
     val lastScoreUri: String? = null,
     val library: LibraryUiState = LibraryUiState(),
+    val paperModeEnabled: Boolean = false,
 )
 
 class MainViewModel(
@@ -53,9 +54,10 @@ class MainViewModel(
     val uiState: StateFlow<MainUiState> = combine(
         settings.libraryUri,
         settings.lastScoreUri,
+        settings.paperModeEnabled,
         _libraryState,
-    ) { libraryUri, lastScoreUri, libraryState ->
-        MainUiState(libraryUri, lastScoreUri, libraryState)
+    ) { libraryUri, lastScoreUri, paperModeEnabled, libraryState ->
+        MainUiState(libraryUri, lastScoreUri, libraryState, paperModeEnabled)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -314,6 +316,10 @@ class MainViewModel(
 
     fun saveReaderLayout(uri: String, preference: PageLayoutPreference) {
         viewModelScope.launch { settings.setReaderLayout(uri, preference) }
+    }
+
+    fun savePaperModeEnabled(enabled: Boolean) {
+        viewModelScope.launch { settings.setPaperModeEnabled(enabled) }
     }
 
     fun recordOpenedScore(uri: String) {
