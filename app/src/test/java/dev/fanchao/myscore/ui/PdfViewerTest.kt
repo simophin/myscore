@@ -69,4 +69,20 @@ class PdfViewerTest {
             constrainZoomOffset(offset = -350f, containerSize = 400, scale = 2f),
         )
     }
+
+    @Test
+    fun zoomGestureDeltaMatchesFingerMovementAtHigherScale() {
+        assertEquals(
+            30f,
+            zoomGestureDeltaToOffsetDelta(delta = 10f, scale = 3f),
+        )
+    }
+
+    @Test
+    fun zoomGestureDeltaIsUnchangedAtBaseScale() {
+        assertEquals(
+            10f,
+            zoomGestureDeltaToOffsetDelta(delta = 10f, scale = 1f),
+        )
+    }
 }
