@@ -385,12 +385,16 @@ private fun PdfPage(
             val centerX = viewportSize.width / 2f
             val centerY = viewportSize.height / 2f
             offsetX = constrainZoomOffset(
-                offset = offsetX * appliedZoom + (centroid.x - centerX) * (1f - appliedZoom) + panChange.x,
+                offset = offsetX * appliedZoom +
+                    (centroid.x - centerX) * (1f - appliedZoom) +
+                    zoomGestureDeltaToOffsetDelta(panChange.x, newScale),
                 containerSize = viewportSize.width,
                 scale = newScale,
             )
             offsetY = constrainZoomOffset(
-                offset = offsetY * appliedZoom + (centroid.y - centerY) * (1f - appliedZoom) + panChange.y,
+                offset = offsetY * appliedZoom +
+                    (centroid.y - centerY) * (1f - appliedZoom) +
+                    zoomGestureDeltaToOffsetDelta(panChange.y, newScale),
                 containerSize = viewportSize.height,
                 scale = newScale,
             )
@@ -499,12 +503,18 @@ private fun PdfPage(
                                 offsetXAnimation.snapTo(offsetX)
                                 offsetYAnimation.snapTo(offsetY)
                                 launch {
-                                    offsetXAnimation.animateDecay(velocity.x, flingDecay) {
+                                    offsetXAnimation.animateDecay(
+                                        zoomGestureDeltaToOffsetDelta(velocity.x, scale),
+                                        flingDecay,
+                                    ) {
                                         offsetX = value
                                     }
                                 }
                                 launch {
-                                    offsetYAnimation.animateDecay(velocity.y, flingDecay) {
+                                    offsetYAnimation.animateDecay(
+                                        zoomGestureDeltaToOffsetDelta(velocity.y, scale),
+                                        flingDecay,
+                                    ) {
                                         offsetY = value
                                     }
                                 }
@@ -540,6 +550,10 @@ internal fun constrainZoomOffset(offset: Float, containerSize: Int, scale: Float
 
 private fun zoomOffsetLimit(containerSize: Int, scale: Float): Float {
     return (containerSize * (scale - 1f) / 2f).coerceAtLeast(0f)
+}
+
+internal fun zoomGestureDeltaToOffsetDelta(delta: Float, scale: Float): Float {
+    return if (scale <= 1f) delta else delta * scale
 }
 
 private fun Set<Int>.withZoomState(pageIndex: Int, zoomed: Boolean): Set<Int> = when {
