@@ -20,6 +20,7 @@ import androidx.compose.ui.unit.dp
 internal fun SettingsScreen(
     modifier: Modifier,
     libraryUri: Uri?,
+    appVersionName: String,
     onChooseFolder: () -> Unit,
     onImportPdf: () -> Unit,
 ) {
@@ -45,6 +46,14 @@ internal fun SettingsScreen(
         Text(
             "Folder access is granted through Android's system picker. MyScore does not request access to all files on your device.",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
+        )
+        Spacer(Modifier.height(16.dp))
+        Text("App", style = MaterialTheme.typography.titleMedium)
+        Text(
+            "Version $appVersionName",
+            color = MaterialTheme.colorScheme.onSurfaceVariant,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
         )
     }
 }
