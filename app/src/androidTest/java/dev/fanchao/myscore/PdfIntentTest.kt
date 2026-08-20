@@ -5,29 +5,30 @@ import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
-import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
+import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.espresso.Espresso.pressBack
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import org.junit.Rule
-import org.junit.Test
-import org.junit.runner.RunWith
+import dev.fanchao.myscore.data.PageLayoutPreference
 import java.io.File
 import java.io.FileOutputStream
 import kotlinx.coroutines.runBlocking
-import dev.fanchao.myscore.data.PageLayoutPreference
+import org.junit.Assert.assertTrue
+import org.junit.Rule
+import org.junit.Test
+import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
-class DeepLinkReaderTest {
+class PdfIntentTest {
     @get:Rule val composeRule = createEmptyComposeRule()
 
     @Test
     fun pdfViewIntentOpensReaderEndToEnd() {
         val context = ApplicationProvider.getApplicationContext<MyScoreApplication>()
-        val pdf = File(context.cacheDir, "Deep Link Score.pdf")
+        val pdf = File(context.cacheDir, "External Score.pdf")
         val document = PdfDocument()
         try {
             document.startPage(PdfDocument.PageInfo.Builder(600, 800, 1).create()).also(document::finishPage)
@@ -47,7 +48,7 @@ class DeepLinkReaderTest {
 
         val scenario = ActivityScenario.launch<MainActivity>(intent)
         try {
-            composeRule.onNodeWithText("Deep Link Score").assertIsDisplayed()
+            composeRule.onNodeWithText("External Score").assertIsDisplayed()
             composeRule.onNodeWithText("1 pages").assertIsDisplayed()
             composeRule.onNodeWithContentDescription("Page layout: Auto").performClick()
             composeRule.onNodeWithText("Single page").performClick()
@@ -57,7 +58,7 @@ class DeepLinkReaderTest {
             composeRule.onNodeWithContentDescription("Enter full screen").performClick()
             composeRule.onNodeWithContentDescription("Exit full screen").assertIsDisplayed()
             pressBack()
-            composeRule.onNodeWithText("Deep Link Score").assertIsDisplayed()
+            composeRule.onNodeWithText("External Score").assertIsDisplayed()
             pressBack()
             composeRule.onNodeWithText("MyScore").assertIsDisplayed()
         } finally {
@@ -66,5 +67,19 @@ class DeepLinkReaderTest {
                 context.settingsRepository.setReaderLayout(pdfUri.toString(), PageLayoutPreference.Auto)
             }
         }
+    }
+
+    @Test
+    fun appIsAdvertisedAsAPdfShareTarget() {
+        val context = ApplicationProvider.getApplicationContext<MyScoreApplication>()
+        val shareIntent = Intent(Intent.ACTION_SEND).apply {
+            type = "application/pdf"
+        }
+
+        val matchingPackages = context.packageManager
+            .queryIntentActivities(shareIntent, 0)
+            .map { it.activityInfo.packageName }
+
+        assertTrue(context.packageName in matchingPackages)
     }
 }

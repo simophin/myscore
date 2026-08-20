@@ -28,7 +28,7 @@ The reader uses the platform `PdfRenderer`, not a WebView or an unmaintained thi
 
 Page layout is a per-document preference with three values: **Auto** (the default), **Single page**, and **Two pages**. Auto uses paired pages when the PDF content composable itself measures at least 840dp wide; it does not read device or physical screen width. Explicit Single and Two choices override that breakpoint at every measured width, and are stored with reader position in the URI-keyed preferences table. A layout change rebuilds the pager around its canonical visible PDF page, preventing unrelated position jumps. Copies have independent preferences; moves retain preferences when their document provider preserves document identity.
 
-The last settled page is persisted per document. The last-opened document URI is also persisted: on a cold start, MyScore reopens it at that page when it is still present in the configured library. If it has moved, been deleted, or lost permission, startup falls back to the gallery. The app accepts PDF `ACTION_VIEW` intents and `myscore://open?uri=<encoded-content-uri>` deep links. A caller must still grant access to a content URI; a deep link cannot bypass Android's URI permission model.
+The last settled page is persisted per document. The last-opened document URI is also persisted: on a cold start, MyScore reopens it at that page when it is still present in the configured library. If it has moved, been deleted, or lost permission, startup falls back to the gallery. The app accepts PDF `ACTION_VIEW` intents for opening a document and PDF `ACTION_SEND` intents for importing a shared document into the configured library.
 
 The selected tree is observed with `ContentObserver`, and the gallery refreshes when a provider reports a change. It also refreshes whenever the app resumes because not every Storage Access Framework provider sends reliable descendant notifications.
 
@@ -74,7 +74,7 @@ The code is grouped by responsibility (`data`, `ui`, `ui/theme`). Repositories i
 
 `MainViewModel` is a plain AndroidX `ViewModel` with no `Application`, `Activity`, `Context`, or storage-provider dependency. It consumes `ScoreLibraryRepository` and `UserSettingsRepository` interfaces and exposes one immutable `MainUiState` `StateFlow`. The UI lifecycle-collects that state and sends user actions back through ViewModel methods, following unidirectional data flow. `MyScoreApplication` is the small composition root; a factory supplies concrete Android repository implementations. A DI framework remains unnecessary at this size.
 
-JVM tests use hand-written fakes rather than mocks and cover folder selection/loading, error state, download preconditions, and reader persistence. Instrumented Compose tests cover gallery selection and bottom navigation. An Activity-level instrumentation test opens a generated PDF through `ACTION_VIEW` and verifies the real reader destination.
+JVM tests use hand-written fakes rather than mocks and cover folder selection/loading, error state, download preconditions, and reader persistence. Instrumented Compose tests cover gallery selection and bottom navigation. Activity-level instrumentation tests cover opening a generated PDF through `ACTION_VIEW` and advertising MyScore as a PDF share target.
 
 ### CI and signing
 
@@ -108,7 +108,7 @@ Implemented:
 - Confirmed deletion and clipboard-style copy/move/paste for files and folders
 - Horizontal PDF reader with double-tap/pinch/pan, remembered page, and last-score restoration
 - Per-score Auto/Single/Two page layout with widget-width-based Auto behavior
-- PDF `ACTION_VIEW` and `myscore://open?uri=…` deep-link handling
+- PDF `ACTION_VIEW` opening and `ACTION_SEND` importing
 - Automatic library refresh from provider change events plus an on-resume fallback
 - Window-responsive navigation: bottom bar in portrait, left rail in landscape/desktop windows
 - Immersive reader full-screen toggle with swipe-reveal system bars
@@ -121,9 +121,8 @@ Next likely increments:
 
 1. Add create-folder and rename operations if real usage shows they are needed.
 2. Add a Library of Congress API-backed Find provider with explicit rights and PDF filtering.
-3. Add an explicit "Copy deep link" action for integrations that already hold URI access.
-4. Move long downloads to WorkManager with progress, cancellation, and retry.
-5. Add repository and UI tests, accessibility checks, and a baseline profile.
+3. Move long downloads to WorkManager with progress, cancellation, and retry.
+4. Add repository and UI tests, accessibility checks, and a baseline profile.
 
 ## Open product questions
 
