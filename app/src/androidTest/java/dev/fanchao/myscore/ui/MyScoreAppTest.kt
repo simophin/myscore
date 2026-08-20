@@ -20,6 +20,7 @@ import dev.fanchao.myscore.data.LibraryEntry
 import dev.fanchao.myscore.ui.theme.MyScoreTheme
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertSame
+import org.junit.Assert.assertTrue
 import org.junit.Rule
 import org.junit.Test
 
@@ -358,6 +359,17 @@ class MyScoreAppTest {
         composeRule.onNodeWithText("Find").performClick()
         composeRule.onNodeWithContentDescription("Back in browser").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Forward in browser").assertIsDisplayed()
+        val backCenterX = composeRule.onNodeWithContentDescription("Back in browser")
+            .fetchSemanticsNode().boundsInRoot.center.x
+        val forwardCenterX = composeRule.onNodeWithContentDescription("Forward in browser")
+            .fetchSemanticsNode().boundsInRoot.center.x
+        val searchCenterX = composeRule.onNodeWithContentDescription("Search IMSLP")
+            .fetchSemanticsNode().boundsInRoot.center.x
+        assertTrue("Back should be immediately left of Forward", backCenterX < forwardCenterX)
+        assertTrue(
+            "Back and Forward should be closer than Forward and Search",
+            forwardCenterX - backCenterX < searchCenterX - forwardCenterX,
+        )
         composeRule.onNodeWithContentDescription("Search IMSLP").performClick()
         composeRule.onNodeWithText("Search IMSLP").assertIsDisplayed()
         composeRule.onNode(hasSetTextAction()).performTextInput("Bach cello suites")
