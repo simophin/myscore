@@ -14,6 +14,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -26,6 +27,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -40,7 +46,9 @@ import androidx.compose.runtime.setValue
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -49,6 +57,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import dev.fanchao.myscore.LibraryUiState
 import dev.fanchao.myscore.FileTransferMode
+import dev.fanchao.myscore.R
 import dev.fanchao.myscore.data.LibraryEntry
 import dev.fanchao.myscore.data.ScoreDocument
 import java.text.DateFormat
@@ -294,13 +303,22 @@ private fun FileRow(
             Modifier.fillMaxWidth().padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(if (entry.isDirectory) "▰" else "♬", style = MaterialTheme.typography.headlineSmall)
-            Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(entry.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            EntryTypeIcon(isDirectory = entry.isDirectory)
+            Box(
+                modifier = Modifier.weight(1f).padding(horizontal = 12.dp),
+                contentAlignment = Alignment.CenterStart,
+            ) {
                 Text(
-                    if (entry.isDirectory) "Folder" else formatFileSize(entry.sizeBytes),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    " \n ",
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    color = Color.Transparent,
+                )
+                Text(
+                    entry.name,
+                    fontWeight = FontWeight.Medium,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             Box {
@@ -308,17 +326,55 @@ private fun FileRow(
                     onClick = { menuExpanded = true },
                     modifier = Modifier.semantics { contentDescription = "Actions for ${entry.name}" },
                 ) {
-                    Text("⋮", style = MaterialTheme.typography.titleLarge)
+                    Icon(imageVector = Icons.Filled.MoreVert, contentDescription = null)
                 }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                    DropdownMenuItem(text = { Text("Copy") }, onClick = { menuExpanded = false; onCopy() })
-                    DropdownMenuItem(text = { Text("Move") }, onClick = { menuExpanded = false; onMove() })
-                    DropdownMenuItem(text = { Text("Rename") }, onClick = { menuExpanded = false; onRename() })
-                    DropdownMenuItem(text = { Text("Delete") }, onClick = { menuExpanded = false; onDelete() })
+                    DropdownMenuItem(
+                        leadingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_content_copy_24),
+                                contentDescription = null,
+                            )
+                        },
+                        text = { Text("Copy") },
+                        onClick = { menuExpanded = false; onCopy() },
+                    )
+                    DropdownMenuItem(
+                        leadingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_drive_file_move_24),
+                                contentDescription = null,
+                            )
+                        },
+                        text = { Text("Move") },
+                        onClick = { menuExpanded = false; onMove() },
+                    )
+                    DropdownMenuItem(
+                        leadingIcon = { Icon(imageVector = Icons.Filled.Edit, contentDescription = null) },
+                        text = { Text("Rename") },
+                        onClick = { menuExpanded = false; onRename() },
+                    )
+                    DropdownMenuItem(
+                        leadingIcon = { Icon(imageVector = Icons.Filled.Delete, contentDescription = null) },
+                        text = { Text("Delete") },
+                        onClick = { menuExpanded = false; onDelete() },
+                    )
                 }
             }
         }
     }
+}
+
+@Composable
+private fun EntryTypeIcon(isDirectory: Boolean) {
+    Icon(
+        painter = painterResource(
+            if (isDirectory) R.drawable.ic_folder_24 else R.drawable.ic_score_page_24,
+        ),
+        contentDescription = null,
+        modifier = Modifier.size(32.dp),
+        tint = MaterialTheme.colorScheme.primary,
+    )
 }
 
 private data class PdfProperties(
@@ -415,7 +471,12 @@ private fun EmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("♬", style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.primary)
+        Icon(
+            painter = painterResource(R.drawable.ic_library_music_24),
+            contentDescription = null,
+            modifier = Modifier.size(56.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
         Spacer(Modifier.height(16.dp))
         Text(title, style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(8.dp))

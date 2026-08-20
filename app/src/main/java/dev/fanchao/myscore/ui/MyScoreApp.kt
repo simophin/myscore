@@ -4,6 +4,7 @@ import android.net.Uri
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
@@ -12,9 +13,12 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.automirrored.filled.ArrowForward
 import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.material.icons.filled.MoreVert
 import androidx.compose.material.icons.filled.Refresh
 import androidx.compose.material.icons.filled.Search
+import androidx.compose.material.icons.filled.Settings
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -40,20 +44,23 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import dev.fanchao.myscore.BuildConfig
 import dev.fanchao.myscore.LibraryUiState
+import dev.fanchao.myscore.R
 import dev.fanchao.myscore.data.LibraryEntry
 import dev.fanchao.myscore.data.ScoreDocument
 
-private enum class AppTab(val label: String, val symbol: String) {
-    Scores("Scores", "♫"),
-    Find("Find", "⌕"),
-    Settings("Settings", "⚙"),
+private enum class AppTab(val label: String) {
+    Scores("Scores"),
+    Find("Find"),
+    Settings("Settings"),
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -101,7 +108,7 @@ fun MyScoreApp(
                     NavigationRailItem(
                         selected = selectedTab == tab,
                         onClick = { selectedTab = tab },
-                        icon = { Text(tab.symbol, style = MaterialTheme.typography.titleLarge) },
+                        icon = { AppTabIcon(tab) },
                         label = { Text(tab.label) },
                     )
                 }
@@ -122,6 +129,8 @@ fun MyScoreApp(
                                 },
                                 style = MaterialTheme.typography.labelMedium,
                                 color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                maxLines = 1,
+                                overflow = TextOverflow.Ellipsis,
                             )
                         }
                     },
@@ -164,11 +173,19 @@ fun MyScoreApp(
                                         )
                                         ScoreSortOrder.entries.forEach { sortOrder ->
                                             DropdownMenuItem(
+                                                leadingIcon = {
+                                                    if (sortOrder == scoreSortOrder) {
+                                                        Icon(
+                                                            imageVector = Icons.Filled.Check,
+                                                            contentDescription = null,
+                                                            modifier = Modifier.size(18.dp),
+                                                        )
+                                                    } else {
+                                                        Spacer(Modifier.size(18.dp))
+                                                    }
+                                                },
                                                 text = {
-                                                    Text(
-                                                        if (sortOrder == scoreSortOrder) "✓  ${sortOrder.label}"
-                                                        else "   ${sortOrder.label}",
-                                                    )
+                                                    Text(sortOrder.label)
                                                 },
                                                 onClick = {
                                                     scoreSortOrder = sortOrder
@@ -177,6 +194,12 @@ fun MyScoreApp(
                                             )
                                         }
                                         DropdownMenuItem(
+                                            leadingIcon = {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Add,
+                                                    contentDescription = null,
+                                                )
+                                            },
                                             text = { Text("New folder") },
                                             enabled = !libraryState.loading,
                                             onClick = {
@@ -231,7 +254,7 @@ fun MyScoreApp(
                             NavigationBarItem(
                                 selected = selectedTab == tab,
                                 onClick = { selectedTab = tab },
-                                icon = { Text(tab.symbol, style = MaterialTheme.typography.titleLarge) },
+                                icon = { AppTabIcon(tab) },
                                 label = { Text(tab.label) },
                             )
                         }
@@ -287,6 +310,27 @@ fun MyScoreApp(
                 creatingFolder = false
                 onCreateFolder(name)
             },
+        )
+    }
+}
+
+@Composable
+private fun AppTabIcon(tab: AppTab) {
+    when (tab) {
+        AppTab.Scores -> Icon(
+            painter = painterResource(R.drawable.ic_library_music_24),
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+        )
+        AppTab.Find -> Icon(
+            imageVector = Icons.Filled.Search,
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
+        )
+        AppTab.Settings -> Icon(
+            imageVector = Icons.Filled.Settings,
+            contentDescription = null,
+            modifier = Modifier.size(24.dp),
         )
     }
 }
