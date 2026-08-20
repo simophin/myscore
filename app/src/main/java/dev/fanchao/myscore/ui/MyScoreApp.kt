@@ -93,6 +93,7 @@ fun MyScoreApp(
     var scoreSortOrder by rememberSaveable { mutableStateOf(ScoreSortOrder.NameAscending) }
     var findSearchVisible by rememberSaveable { mutableStateOf(false) }
     var findWebViewState by remember { mutableStateOf(FindWebViewState()) }
+    var findInitialPageLoaded by rememberSaveable { mutableStateOf(false) }
     val findWebViewHolder = remember { ImslpWebViewHolder() }
     DisposableEffect(findWebViewHolder) {
         onDispose(findWebViewHolder::destroy)
@@ -291,6 +292,8 @@ fun MyScoreApp(
                     searchVisible = findSearchVisible,
                     onDismissSearch = { findSearchVisible = false },
                     onWebViewStateChanged = { findWebViewState = it },
+                    initialPageLoaded = findInitialPageLoaded,
+                    onInitialPageLoaded = { findInitialPageLoaded = true },
                 )
                 AppTab.Settings -> SettingsScreen(
                     modifier = Modifier.padding(padding),

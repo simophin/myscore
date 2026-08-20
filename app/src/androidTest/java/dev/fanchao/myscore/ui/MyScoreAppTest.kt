@@ -147,7 +147,8 @@ class MyScoreAppTest {
         composeRule.onNodeWithText("Score library").assertIsDisplayed()
         composeRule.onNodeWithText("Choose folder").assertIsDisplayed()
         composeRule.onNodeWithText("Import an existing PDF").assertIsDisplayed()
-        composeRule.onNodeWithText("Version test-version").assertIsDisplayed()
+        composeRule.onNodeWithText("App version").assertIsDisplayed()
+        composeRule.onNodeWithText("test-version").assertIsDisplayed()
     }
 
     @Test

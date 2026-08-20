@@ -1,6 +1,10 @@
 package dev.fanchao.myscore.ui
 
 import android.net.Uri
+import androidx.compose.animation.ContentTransform
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.material3.CircularProgressIndicator
@@ -11,6 +15,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.navigation3.scene.Scene
 import androidx.navigation3.runtime.NavEntry
 import androidx.navigation3.runtime.NavKey
 import androidx.navigation3.runtime.rememberNavBackStack
@@ -80,6 +85,12 @@ internal fun MyScoreNavigation(
         backStack = backStack,
         modifier = Modifier.fillMaxSize(),
         onBack = navigateBack,
+        transitionSpec = {
+            scoreViewerSlideForwardTransition()
+        },
+        popTransitionSpec = {
+            scoreViewerSlideBackTransition()
+        },
         entryProvider = { route ->
             when (route) {
                 ScoresRoute -> NavEntry(route) {
@@ -137,3 +148,29 @@ internal fun MyScoreNavigation(
         },
     )
 }
+
+private fun androidx.compose.animation.AnimatedContentTransitionScope<Scene<NavKey>>.scoreViewerSlideForwardTransition():
+    ContentTransform =
+    ContentTransform(
+        targetContentEnter = slideInHorizontally(
+            animationSpec = spring(),
+            initialOffsetX = { fullWidth -> fullWidth },
+        ),
+        initialContentExit = slideOutHorizontally(
+            animationSpec = spring(),
+            targetOffsetX = { fullWidth -> -fullWidth / 3 },
+        ),
+    )
+
+private fun androidx.compose.animation.AnimatedContentTransitionScope<Scene<NavKey>>.scoreViewerSlideBackTransition():
+    ContentTransform =
+    ContentTransform(
+        targetContentEnter = slideInHorizontally(
+            animationSpec = spring(),
+            initialOffsetX = { fullWidth -> -fullWidth / 3 },
+        ),
+        initialContentExit = slideOutHorizontally(
+            animationSpec = spring(),
+            targetOffsetX = { fullWidth -> fullWidth },
+        ),
+    )
