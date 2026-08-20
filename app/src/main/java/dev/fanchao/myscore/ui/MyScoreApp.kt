@@ -8,10 +8,18 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.automirrored.filled.ArrowForward
+import androidx.compose.material.icons.filled.Close
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material.icons.filled.Refresh
+import androidx.compose.material.icons.filled.Search
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
 import androidx.compose.material3.NavigationBarItem
@@ -31,6 +39,7 @@ import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalWindowInfo
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
@@ -117,7 +126,7 @@ fun MyScoreApp(
                     navigationIcon = {
                         if (selectedTab == AppTab.Scores && libraryState.path.size > 1) {
                             IconButton(onClick = onNavigateUp) {
-                                AppBarGlyph("‹", "Back to parent folder")
+                                AppBarIcon(Icons.AutoMirrored.Filled.ArrowBack, "Back to parent folder")
                             }
                         }
                     },
@@ -134,12 +143,12 @@ fun MyScoreApp(
                                     )
                                 } else {
                                     IconButton(onClick = onRefresh) {
-                                        AppBarGlyph("↻", "Refresh scores")
+                                        AppBarIcon(Icons.Filled.Refresh, "Refresh scores")
                                     }
                                 }
                                 Box {
                                     IconButton(onClick = { scoreActionsExpanded = true }) {
-                                        AppBarGlyph("⋮", "Score actions")
+                                        AppBarIcon(Icons.Filled.MoreVert, "Score actions")
                                     }
                                     DropdownMenu(
                                         expanded = scoreActionsExpanded,
@@ -181,28 +190,28 @@ fun MyScoreApp(
                                     onClick = findWebViewHolder::goBack,
                                     enabled = findWebViewState.canGoBack,
                                 ) {
-                                    AppBarGlyph("‹", "Back in browser")
+                                    AppBarIcon(Icons.AutoMirrored.Filled.ArrowBack, "Back in browser")
                                 }
                                 IconButton(
                                     onClick = findWebViewHolder::goForward,
                                     enabled = findWebViewState.canGoForward,
                                 ) {
-                                    AppBarGlyph("›", "Forward in browser")
+                                    AppBarIcon(Icons.AutoMirrored.Filled.ArrowForward, "Forward in browser")
                                 }
                                 if (findWebViewState.isLoading) {
                                     IconButton(onClick = {
                                         findWebViewHolder.stopLoading()
                                         findWebViewState = findWebViewState.copy(isLoading = false)
                                     }) {
-                                        AppBarGlyph("■", "Stop loading page")
+                                        AppBarIcon(Icons.Filled.Close, "Stop loading page")
                                     }
                                 } else {
                                     IconButton(onClick = findWebViewHolder::reload) {
-                                        AppBarGlyph("↻", "Refresh page")
+                                        AppBarIcon(Icons.Filled.Refresh, "Refresh page")
                                     }
                                 }
                                 IconButton(onClick = { findSearchVisible = true }) {
-                                    AppBarGlyph("⌕", "Search IMSLP")
+                                    AppBarIcon(Icons.Filled.Search, "Search IMSLP")
                                 }
                             }
                             AppTab.Settings -> Unit
@@ -280,10 +289,10 @@ fun MyScoreApp(
 }
 
 @Composable
-private fun AppBarGlyph(symbol: String, description: String) {
-    Text(
-        symbol,
-        modifier = Modifier.semantics { contentDescription = description },
-        style = MaterialTheme.typography.headlineLarge,
+private fun AppBarIcon(imageVector: ImageVector, description: String) {
+    Icon(
+        imageVector = imageVector,
+        contentDescription = description,
+        modifier = Modifier.size(24.dp),
     )
 }
