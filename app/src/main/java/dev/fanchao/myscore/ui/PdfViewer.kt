@@ -16,10 +16,16 @@ import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.automirrored.filled.ArrowBack
+import androidx.compose.material.icons.filled.Check
+import androidx.compose.material3.Icon
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
@@ -53,11 +59,13 @@ import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
+import dev.fanchao.myscore.R
 import dev.fanchao.myscore.data.ScoreDocument
 import dev.fanchao.myscore.data.PageLayoutPreference
 import kotlinx.coroutines.Dispatchers
@@ -114,7 +122,14 @@ fun PdfViewer(
         topBar = {
             if (!fullScreen) {
                 TopAppBar(
-                    navigationIcon = { IconButton(onClick = onBack) { Text("‹", style = MaterialTheme.typography.headlineMedium) } },
+                    navigationIcon = {
+                        IconButton(onClick = onBack) {
+                            Icon(
+                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                                contentDescription = "Back to scores",
+                            )
+                        }
+                    },
                     title = { Text(score.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
                     actions = {
                         openPdf?.let { pdf -> Text("${pdf.renderer.pageCount} pages") }
@@ -124,16 +139,30 @@ fun PdfViewer(
                                 modifier = Modifier.semantics {
                                     contentDescription = "Page layout: ${layoutPreference.label}"
                                 },
-                            ) { Text("▣", style = MaterialTheme.typography.titleLarge) }
+                            ) {
+                                Icon(
+                                    painter = painterResource(R.drawable.ic_view_week_24),
+                                    contentDescription = null,
+                                )
+                            }
                             DropdownMenu(
                                 expanded = layoutMenuExpanded,
                                 onDismissRequest = { layoutMenuExpanded = false },
                             ) {
                                 PageLayoutPreference.entries.forEach { preference ->
                                     DropdownMenuItem(
-                                        text = {
-                                            Text("${if (preference == layoutPreference) "✓  " else ""}${preference.label}")
+                                        leadingIcon = {
+                                            if (preference == layoutPreference) {
+                                                Icon(
+                                                    imageVector = Icons.Filled.Check,
+                                                    contentDescription = null,
+                                                    modifier = Modifier.size(18.dp),
+                                                )
+                                            } else {
+                                                Spacer(Modifier.size(18.dp))
+                                            }
                                         },
+                                        text = { Text(preference.label) },
                                         onClick = {
                                             layoutMenuExpanded = false
                                             onLayoutPreferenceChanged(preference)
@@ -145,7 +174,12 @@ fun PdfViewer(
                         IconButton(
                             onClick = { fullScreen = true },
                             modifier = Modifier.semantics { contentDescription = "Enter full screen" },
-                        ) { Text("⛶", style = MaterialTheme.typography.titleLarge) }
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_fullscreen_24),
+                                contentDescription = null,
+                            )
+                        }
                     },
                 )
             }
@@ -241,7 +275,12 @@ fun PdfViewer(
                     .align(Alignment.TopEnd)
                     .padding(12.dp)
                     .semantics { contentDescription = "Exit full screen" },
-            ) { Text("↙", style = MaterialTheme.typography.titleLarge) }
+            ) {
+                Icon(
+                    painter = painterResource(R.drawable.ic_fullscreen_exit_24),
+                    contentDescription = null,
+                )
+            }
         }
     }
 }

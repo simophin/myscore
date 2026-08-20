@@ -2,7 +2,6 @@ package dev.fanchao.myscore.ui
 
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
-import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -28,6 +27,11 @@ import androidx.compose.material3.CardDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material.icons.Icons
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.MoreVert
+import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.OutlinedTextField
@@ -42,10 +46,8 @@ import androidx.compose.runtime.setValue
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
-import androidx.compose.ui.geometry.CornerRadius
-import androidx.compose.ui.geometry.Offset
-import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalContext
+import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
 import androidx.compose.ui.text.style.TextOverflow
@@ -54,6 +56,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import dev.fanchao.myscore.LibraryUiState
 import dev.fanchao.myscore.FileTransferMode
+import dev.fanchao.myscore.R
 import dev.fanchao.myscore.data.LibraryEntry
 import dev.fanchao.myscore.data.ScoreDocument
 import java.text.DateFormat
@@ -314,13 +317,39 @@ private fun FileRow(
                     onClick = { menuExpanded = true },
                     modifier = Modifier.semantics { contentDescription = "Actions for ${entry.name}" },
                 ) {
-                    Text("⋮", style = MaterialTheme.typography.titleLarge)
+                    Icon(imageVector = Icons.Filled.MoreVert, contentDescription = null)
                 }
                 DropdownMenu(expanded = menuExpanded, onDismissRequest = { menuExpanded = false }) {
-                    DropdownMenuItem(text = { Text("Copy") }, onClick = { menuExpanded = false; onCopy() })
-                    DropdownMenuItem(text = { Text("Move") }, onClick = { menuExpanded = false; onMove() })
-                    DropdownMenuItem(text = { Text("Rename") }, onClick = { menuExpanded = false; onRename() })
-                    DropdownMenuItem(text = { Text("Delete") }, onClick = { menuExpanded = false; onDelete() })
+                    DropdownMenuItem(
+                        leadingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_content_copy_24),
+                                contentDescription = null,
+                            )
+                        },
+                        text = { Text("Copy") },
+                        onClick = { menuExpanded = false; onCopy() },
+                    )
+                    DropdownMenuItem(
+                        leadingIcon = {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_drive_file_move_24),
+                                contentDescription = null,
+                            )
+                        },
+                        text = { Text("Move") },
+                        onClick = { menuExpanded = false; onMove() },
+                    )
+                    DropdownMenuItem(
+                        leadingIcon = { Icon(imageVector = Icons.Filled.Edit, contentDescription = null) },
+                        text = { Text("Rename") },
+                        onClick = { menuExpanded = false; onRename() },
+                    )
+                    DropdownMenuItem(
+                        leadingIcon = { Icon(imageVector = Icons.Filled.Delete, contentDescription = null) },
+                        text = { Text("Delete") },
+                        onClick = { menuExpanded = false; onDelete() },
+                    )
                 }
             }
         }
@@ -329,30 +358,14 @@ private fun FileRow(
 
 @Composable
 private fun EntryTypeIcon(isDirectory: Boolean) {
-    Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
-        if (isDirectory) {
-            val color = MaterialTheme.colorScheme.primary
-            Canvas(Modifier.size(28.dp)) {
-                val tabTop = size.height * 0.24f
-                val tabHeight = size.height * 0.22f
-                val bodyTop = size.height * 0.36f
-                drawRoundRect(
-                    color = color,
-                    topLeft = Offset(size.width * 0.08f, tabTop),
-                    size = Size(size.width * 0.42f, tabHeight),
-                    cornerRadius = CornerRadius(size.width * 0.08f, size.width * 0.08f),
-                )
-                drawRoundRect(
-                    color = color,
-                    topLeft = Offset(size.width * 0.08f, bodyTop),
-                    size = Size(size.width * 0.84f, size.height * 0.42f),
-                    cornerRadius = CornerRadius(size.width * 0.1f, size.width * 0.1f),
-                )
-            }
-        } else {
-            Text("♬", style = MaterialTheme.typography.headlineSmall)
-        }
-    }
+    Icon(
+        painter = painterResource(
+            if (isDirectory) R.drawable.ic_folder_24 else R.drawable.ic_picture_as_pdf_24,
+        ),
+        contentDescription = null,
+        modifier = Modifier.size(32.dp),
+        tint = MaterialTheme.colorScheme.primary,
+    )
 }
 
 private data class PdfProperties(
@@ -449,7 +462,12 @@ private fun EmptyState(
         horizontalAlignment = Alignment.CenterHorizontally,
         verticalArrangement = Arrangement.Center,
     ) {
-        Text("♬", style = MaterialTheme.typography.displayLarge, color = MaterialTheme.colorScheme.primary)
+        Icon(
+            painter = painterResource(R.drawable.ic_library_music_24),
+            contentDescription = null,
+            modifier = Modifier.size(56.dp),
+            tint = MaterialTheme.colorScheme.primary,
+        )
         Spacer(Modifier.height(16.dp))
         Text(title, style = MaterialTheme.typography.headlineSmall)
         Spacer(Modifier.height(8.dp))
