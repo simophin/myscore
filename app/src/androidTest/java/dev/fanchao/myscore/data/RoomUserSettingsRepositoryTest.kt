@@ -3,6 +3,7 @@ package dev.fanchao.myscore.data
 import androidx.room.Room
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
+import kotlinx.coroutines.async
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.test.runTest
 import org.junit.After
@@ -37,6 +38,17 @@ class RoomUserSettingsRepositoryTest {
 
         assertEquals("content://scores", repository.libraryUri.first())
         assertEquals("content://scores/bach.pdf", repository.lastScoreUri.first())
+    }
+
+    @Test
+    fun genericConfigsEmitWhenInsertedAfterObservationStarts() = runTest {
+        assertEquals(null, repository.libraryUri.first())
+
+        val observedUri = async { repository.libraryUri.first { it == "content://scores" } }
+
+        repository.setLibraryUri("content://scores")
+
+        assertEquals("content://scores", observedUri.await())
     }
 
     @Test
