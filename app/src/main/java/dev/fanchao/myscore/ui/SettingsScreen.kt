@@ -34,7 +34,7 @@ internal fun SettingsScreen(
         modifier = modifier.fillMaxSize().padding(20.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp),
     ) {
-        Text("Score library", style = MaterialTheme.typography.headlineSmall)
+        Text("Score library", style = MaterialTheme.typography.titleMedium)
         Text(
             libraryUri?.lastPathSegment ?: "No folder selected",
             color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -70,15 +70,9 @@ internal fun SettingsScreen(
             )
         }
         Spacer(Modifier.height(16.dp))
-        Text("Storage", style = MaterialTheme.typography.titleMedium)
+        Text("App version", style = MaterialTheme.typography.titleMedium)
         Text(
-            "Folder access is granted through Android's system picker. MyScore does not request access to all files on your device.",
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
-        Spacer(Modifier.height(16.dp))
-        Text("App", style = MaterialTheme.typography.titleMedium)
-        Text(
-            "Version $appVersionName",
+            appVersionName,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             maxLines = 1,
             overflow = TextOverflow.Ellipsis,

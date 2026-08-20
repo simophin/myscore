@@ -1,6 +1,12 @@
 package dev.fanchao.myscore.ui
 
 import android.net.Uri
+import androidx.compose.animation.AnimatedContent
+import androidx.compose.animation.SizeTransform
+import androidx.compose.animation.core.spring
+import androidx.compose.animation.slideInHorizontally
+import androidx.compose.animation.slideOutHorizontally
+import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -93,6 +99,7 @@ fun MyScoreApp(
     var scoreSortOrder by rememberSaveable { mutableStateOf(ScoreSortOrder.NameAscending) }
     var findSearchVisible by rememberSaveable { mutableStateOf(false) }
     var findWebViewState by remember { mutableStateOf(FindWebViewState()) }
+    var findInitialPageLoaded by rememberSaveable { mutableStateOf(false) }
     val findWebViewHolder = remember { ImslpWebViewHolder() }
     DisposableEffect(findWebViewHolder) {
         onDispose(findWebViewHolder::destroy)
@@ -264,43 +271,69 @@ fun MyScoreApp(
                 }
             },
         ) { padding ->
-            when (selectedTab) {
-                AppTab.Scores -> ScoresScreen(
-                    modifier = Modifier.padding(padding),
-                    libraryUri = libraryUri,
-                    state = libraryState,
-                    sortOrder = scoreSortOrder,
-                    onChooseFolder = onChooseFolder,
-                    onOpenScore = onOpenScore,
-                    onOpenDirectory = onOpenDirectory,
-                    onNavigateUp = onNavigateUp,
-                    onCopy = onCopy,
-                    onMove = onMove,
-                    onPaste = onPaste,
-                    onClearClipboard = onClearClipboard,
-                    onRename = onRename,
-                    onDelete = onDelete,
-                )
-                AppTab.Find -> FindScreen(
-                    modifier = Modifier.padding(padding),
-                    webViewHolder = findWebViewHolder,
-                    hasLibrary = libraryUri != null,
-                    state = libraryState,
-                    onDownloadPdf = onDownloadPdf,
-                    onOpenDownloadedScore = onOpenDownloadedScore,
-                    searchVisible = findSearchVisible,
-                    onDismissSearch = { findSearchVisible = false },
-                    onWebViewStateChanged = { findWebViewState = it },
-                )
-                AppTab.Settings -> SettingsScreen(
-                    modifier = Modifier.padding(padding),
-                    libraryUri = libraryUri,
-                    paperModeEnabled = paperModeEnabled,
-                    appVersionName = appVersionName,
-                    onChooseFolder = onChooseFolder,
-                    onImportPdf = onImportPdf,
-                    onPaperModeChanged = onPaperModeChanged,
-                )
+            AnimatedContent(
+                targetState = selectedTab,
+                transitionSpec = {
+                    if (targetState.ordinal > initialState.ordinal) {
+                        slideInHorizontally(
+                            animationSpec = spring(),
+                            initialOffsetX = { fullWidth -> fullWidth },
+                        ) togetherWith slideOutHorizontally(
+                            animationSpec = spring(),
+                            targetOffsetX = { fullWidth -> -fullWidth / 3 },
+                        )
+                    } else {
+                        slideInHorizontally(
+                            animationSpec = spring(),
+                            initialOffsetX = { fullWidth -> -fullWidth },
+                        ) togetherWith slideOutHorizontally(
+                            animationSpec = spring(),
+                            targetOffsetX = { fullWidth -> fullWidth / 3 },
+                        )
+                    }.using(SizeTransform(clip = false))
+                },
+                label = "top-level-tab-transition",
+            ) { tab ->
+                when (tab) {
+                    AppTab.Scores -> ScoresScreen(
+                        modifier = Modifier.padding(padding),
+                        libraryUri = libraryUri,
+                        state = libraryState,
+                        sortOrder = scoreSortOrder,
+                        onChooseFolder = onChooseFolder,
+                        onOpenScore = onOpenScore,
+                        onOpenDirectory = onOpenDirectory,
+                        onNavigateUp = onNavigateUp,
+                        onCopy = onCopy,
+                        onMove = onMove,
+                        onPaste = onPaste,
+                        onClearClipboard = onClearClipboard,
+                        onRename = onRename,
+                        onDelete = onDelete,
+                    )
+                    AppTab.Find -> FindScreen(
+                        modifier = Modifier.padding(padding),
+                        webViewHolder = findWebViewHolder,
+                        hasLibrary = libraryUri != null,
+                        state = libraryState,
+                        onDownloadPdf = onDownloadPdf,
+                        onOpenDownloadedScore = onOpenDownloadedScore,
+                        searchVisible = findSearchVisible,
+                        onDismissSearch = { findSearchVisible = false },
+                        onWebViewStateChanged = { findWebViewState = it },
+                        initialPageLoaded = findInitialPageLoaded,
+                        onInitialPageLoaded = { findInitialPageLoaded = true },
+                    )
+                    AppTab.Settings -> SettingsScreen(
+                        modifier = Modifier.padding(padding),
+                        libraryUri = libraryUri,
+                        paperModeEnabled = paperModeEnabled,
+                        appVersionName = appVersionName,
+                        onChooseFolder = onChooseFolder,
+                        onImportPdf = onImportPdf,
+                        onPaperModeChanged = onPaperModeChanged,
+                    )
+                }
             }
         }
     }

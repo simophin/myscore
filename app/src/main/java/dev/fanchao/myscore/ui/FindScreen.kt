@@ -4,14 +4,19 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.Intent
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.text.KeyboardActions
 import androidx.compose.material3.AlertDialog
+import androidx.compose.material3.Card
+import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -41,6 +46,8 @@ internal fun FindScreen(
     searchVisible: Boolean,
     onDismissSearch: () -> Unit,
     onWebViewStateChanged: (FindWebViewState) -> Unit,
+    initialPageLoaded: Boolean,
+    onInitialPageLoaded: () -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var webView by remember { mutableStateOf<android.webkit.WebView?>(null) }
@@ -94,8 +101,38 @@ internal fun FindScreen(
                 updateWebViewState(it.navigationState())
             },
             onStateChanged = ::updateWebViewState,
+            onInitialPageLoaded = onInitialPageLoaded,
             onDownload = onDownloadPdf,
         )
+    }
+    if (!initialPageLoaded) {
+        Surface(
+            modifier = Modifier.fillMaxSize(),
+            color = MaterialTheme.colorScheme.scrim.copy(alpha = 0.2f),
+        ) {
+            Column(
+                modifier = Modifier.fillMaxSize(),
+                horizontalAlignment = Alignment.CenterHorizontally,
+                verticalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
+            ) {
+                Card {
+                    Column(
+                        modifier = Modifier.padding(horizontal = 24.dp, vertical = 20.dp),
+                        horizontalAlignment = Alignment.CenterHorizontally,
+                    ) {
+                        CircularProgressIndicator()
+                        Spacer(Modifier.height(16.dp))
+                        Text("Loading IMSLP")
+                        Spacer(Modifier.height(6.dp))
+                        Text(
+                            "Preparing the Find browser for the first page.",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            }
+        }
     }
     if (searchVisible) {
         AlertDialog(
@@ -128,6 +165,7 @@ private fun ImslpWebView(
     holder: ImslpWebViewHolder,
     onReady: (android.webkit.WebView) -> Unit,
     onStateChanged: (FindWebViewState) -> Unit,
+    onInitialPageLoaded: () -> Unit,
     onDownload: (String, String?, String?, String?, String?) -> Unit,
 ) {
     AndroidView(
@@ -154,6 +192,7 @@ private fun ImslpWebView(
                     override fun onPageFinished(view: android.webkit.WebView, url: String?) {
                         super.onPageFinished(view, url)
                         onStateChanged(view.navigationState(isLoading = false))
+                        onInitialPageLoaded()
                     }
 
                     override fun doUpdateVisitedHistory(
