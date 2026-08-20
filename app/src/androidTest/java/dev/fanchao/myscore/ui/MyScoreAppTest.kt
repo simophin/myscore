@@ -290,6 +290,46 @@ class MyScoreAppTest {
     }
 
     @Test
+    fun scoreBrowserOffersSortingInTheAppBarMenu() {
+        composeRule.setContent {
+            MyScoreTheme {
+                MyScoreApp(
+                    libraryUri = android.net.Uri.parse("content://library"),
+                    libraryState = LibraryUiState(
+                        initialized = true,
+                        entries = listOf(
+                            LibraryEntry("content://library/a.pdf", "A.pdf", false, 100, 100),
+                            LibraryEntry("content://library/z.pdf", "Z.pdf", false, 100, 200),
+                        ),
+                        path = listOf(dev.fanchao.myscore.FolderLocation("content://library", "Scores")),
+                    ),
+                    onChooseFolder = {},
+                    onImportPdf = {},
+                    onDownloadPdf = { _, _, _, _, _ -> },
+                    onOpenDownloadedScore = {},
+                    onRefresh = {},
+                    onOpenScore = {},
+                    onOpenDirectory = {},
+                    onNavigateUp = {},
+                    onCopy = {},
+                    onMove = {},
+                    onPaste = {},
+                    onClearClipboard = {},
+                    onCreateFolder = {},
+                    onRename = { _, _ -> },
+                    onDelete = {},
+                )
+            }
+        }
+
+        composeRule.onNodeWithContentDescription("Score actions").performClick()
+        composeRule.onNodeWithText("Sort by").assertIsDisplayed()
+        composeRule.onNodeWithText("Name (Z–A)", substring = true).performClick()
+        composeRule.onNodeWithContentDescription("Score actions").performClick()
+        composeRule.onNodeWithText("Name (Z–A)", substring = true).assertIsDisplayed()
+    }
+
+    @Test
     fun findWebViewInstanceSurvivesTabSwitch() {
         composeRule.setContent {
             MyScoreTheme {
@@ -316,6 +356,8 @@ class MyScoreAppTest {
         }
 
         composeRule.onNodeWithText("Find").performClick()
+        composeRule.onNodeWithContentDescription("Back in browser").assertIsDisplayed()
+        composeRule.onNodeWithContentDescription("Forward in browser").assertIsDisplayed()
         composeRule.onNodeWithContentDescription("Search IMSLP").performClick()
         composeRule.onNodeWithText("Search IMSLP").assertIsDisplayed()
         composeRule.onNode(hasSetTextAction()).performTextInput("Bach cello suites")

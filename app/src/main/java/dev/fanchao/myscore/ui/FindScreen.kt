@@ -40,15 +40,17 @@ internal fun FindScreen(
     onOpenDownloadedScore: (ScoreDocument) -> Unit,
     searchVisible: Boolean,
     onDismissSearch: () -> Unit,
+    onWebViewStateChanged: (FindWebViewState) -> Unit,
 ) {
     var query by remember { mutableStateOf("") }
     var webView by remember { mutableStateOf<android.webkit.WebView?>(null) }
-    var canNavigateBack by remember { mutableStateOf(false) }
-    BackHandler(enabled = canNavigateBack) {
-        webView?.let { view ->
-            if (view.canGoBack()) view.goBack()
-            canNavigateBack = view.canGoBack()
-        }
+    var webViewState by remember { mutableStateOf(FindWebViewState()) }
+    fun updateWebViewState(state: FindWebViewState) {
+        webViewState = state
+        onWebViewStateChanged(state)
+    }
+    BackHandler(enabled = webViewState.canGoBack) {
+        webViewHolder.goBack()
     }
     fun submitSearch() {
         val encoded = URLEncoder.encode(query.trim(), StandardCharsets.UTF_8.toString())
@@ -89,9 +91,9 @@ internal fun FindScreen(
             holder = webViewHolder,
             onReady = {
                 webView = it
-                canNavigateBack = it.canGoBack()
+                updateWebViewState(it.navigationState())
             },
-            onHistoryChanged = { canNavigateBack = it },
+            onStateChanged = ::updateWebViewState,
             onDownload = onDownloadPdf,
         )
     }
@@ -125,7 +127,7 @@ private fun ImslpWebView(
     modifier: Modifier,
     holder: ImslpWebViewHolder,
     onReady: (android.webkit.WebView) -> Unit,
-    onHistoryChanged: (canGoBack: Boolean) -> Unit,
+    onStateChanged: (FindWebViewState) -> Unit,
     onDownload: (String, String?, String?, String?, String?) -> Unit,
 ) {
     AndroidView(
@@ -140,13 +142,27 @@ private fun ImslpWebView(
                 settings.setSupportMultipleWindows(false)
                 settings.javaScriptCanOpenWindowsAutomatically = false
                 webViewClient = object : android.webkit.WebViewClient() {
+                    override fun onPageStarted(
+                        view: android.webkit.WebView,
+                        url: String?,
+                        favicon: android.graphics.Bitmap?,
+                    ) {
+                        super.onPageStarted(view, url, favicon)
+                        onStateChanged(view.navigationState(isLoading = true))
+                    }
+
+                    override fun onPageFinished(view: android.webkit.WebView, url: String?) {
+                        super.onPageFinished(view, url)
+                        onStateChanged(view.navigationState(isLoading = false))
+                    }
+
                     override fun doUpdateVisitedHistory(
                         view: android.webkit.WebView,
                         url: String?,
                         isReload: Boolean,
                     ) {
                         super.doUpdateVisitedHistory(view, url, isReload)
-                        onHistoryChanged(view.canGoBack())
+                        onStateChanged(view.navigationState())
                     }
 
                     override fun shouldOverrideUrlLoading(
@@ -201,4 +217,32 @@ internal class ImslpWebViewHolder {
         }
         webView = null
     }
+
+    fun goBack() {
+        webView?.takeIf { it.canGoBack() }?.goBack()
+    }
+
+    fun goForward() {
+        webView?.takeIf { it.canGoForward() }?.goForward()
+    }
+
+    fun reload() {
+        webView?.reload()
+    }
+
+    fun stopLoading() {
+        webView?.stopLoading()
+    }
 }
+
+internal data class FindWebViewState(
+    val canGoBack: Boolean = false,
+    val canGoForward: Boolean = false,
+    val isLoading: Boolean = false,
+)
+
+private fun android.webkit.WebView.navigationState(isLoading: Boolean = progress < 100) = FindWebViewState(
+    canGoBack = canGoBack(),
+    canGoForward = canGoForward(),
+    isLoading = isLoading,
+)

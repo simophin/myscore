@@ -70,7 +70,9 @@ fun MyScoreApp(
     var selectedTab by rememberSaveable { mutableStateOf(AppTab.Scores) }
     var creatingFolder by rememberSaveable { mutableStateOf(false) }
     var scoreActionsExpanded by remember { mutableStateOf(false) }
+    var scoreSortOrder by rememberSaveable { mutableStateOf(ScoreSortOrder.NameAscending) }
     var findSearchVisible by rememberSaveable { mutableStateOf(false) }
+    var findWebViewState by remember { mutableStateOf(FindWebViewState()) }
     val findWebViewHolder = remember { ImslpWebViewHolder() }
     DisposableEffect(findWebViewHolder) {
         onDispose(findWebViewHolder::destroy)
@@ -121,6 +123,17 @@ fun MyScoreApp(
                                     style = MaterialTheme.typography.headlineMedium,
                                 )
                             }
+                        } else if (selectedTab == AppTab.Find) {
+                            IconButton(
+                                onClick = findWebViewHolder::goBack,
+                                enabled = findWebViewState.canGoBack,
+                            ) {
+                                Text(
+                                    "‹",
+                                    modifier = Modifier.semantics { contentDescription = "Back in browser" },
+                                    style = MaterialTheme.typography.headlineMedium,
+                                )
+                            }
                         }
                     },
                     actions = {
@@ -155,6 +168,26 @@ fun MyScoreApp(
                                         expanded = scoreActionsExpanded,
                                         onDismissRequest = { scoreActionsExpanded = false },
                                     ) {
+                                        Text(
+                                            "Sort by",
+                                            modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp),
+                                            style = MaterialTheme.typography.labelMedium,
+                                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                        )
+                                        ScoreSortOrder.entries.forEach { sortOrder ->
+                                            DropdownMenuItem(
+                                                text = {
+                                                    Text(
+                                                        if (sortOrder == scoreSortOrder) "✓  ${sortOrder.label}"
+                                                        else "   ${sortOrder.label}",
+                                                    )
+                                                },
+                                                onClick = {
+                                                    scoreSortOrder = sortOrder
+                                                    scoreActionsExpanded = false
+                                                },
+                                            )
+                                        }
                                         DropdownMenuItem(
                                             text = { Text("New folder") },
                                             enabled = !libraryState.loading,
@@ -166,12 +199,44 @@ fun MyScoreApp(
                                     }
                                 }
                             }
-                            AppTab.Find -> IconButton(onClick = { findSearchVisible = true }) {
-                                Text(
-                                    "⌕",
-                                    modifier = Modifier.semantics { contentDescription = "Search IMSLP" },
-                                    style = MaterialTheme.typography.titleLarge,
-                                )
+                            AppTab.Find -> {
+                                IconButton(
+                                    onClick = findWebViewHolder::goForward,
+                                    enabled = findWebViewState.canGoForward,
+                                ) {
+                                    Text(
+                                        "›",
+                                        modifier = Modifier.semantics { contentDescription = "Forward in browser" },
+                                        style = MaterialTheme.typography.headlineMedium,
+                                    )
+                                }
+                                if (findWebViewState.isLoading) {
+                                    IconButton(onClick = {
+                                        findWebViewHolder.stopLoading()
+                                        findWebViewState = findWebViewState.copy(isLoading = false)
+                                    }) {
+                                        Text(
+                                            "■",
+                                            modifier = Modifier.semantics { contentDescription = "Stop loading page" },
+                                            style = MaterialTheme.typography.titleMedium,
+                                        )
+                                    }
+                                } else {
+                                    IconButton(onClick = findWebViewHolder::reload) {
+                                        Text(
+                                            "↻",
+                                            modifier = Modifier.semantics { contentDescription = "Refresh page" },
+                                            style = MaterialTheme.typography.titleLarge,
+                                        )
+                                    }
+                                }
+                                IconButton(onClick = { findSearchVisible = true }) {
+                                    Text(
+                                        "⌕",
+                                        modifier = Modifier.semantics { contentDescription = "Search IMSLP" },
+                                        style = MaterialTheme.typography.titleLarge,
+                                    )
+                                }
                             }
                             AppTab.Settings -> Unit
                         }
@@ -201,6 +266,7 @@ fun MyScoreApp(
                     modifier = Modifier.padding(padding),
                     libraryUri = libraryUri,
                     state = libraryState,
+                    sortOrder = scoreSortOrder,
                     onChooseFolder = onChooseFolder,
                     onOpenScore = onOpenScore,
                     onOpenDirectory = onOpenDirectory,
@@ -221,6 +287,7 @@ fun MyScoreApp(
                     onOpenDownloadedScore = onOpenDownloadedScore,
                     searchVisible = findSearchVisible,
                     onDismissSearch = { findSearchVisible = false },
+                    onWebViewStateChanged = { findWebViewState = it },
                 )
                 AppTab.Settings -> SettingsScreen(
                     modifier = Modifier.padding(padding),
