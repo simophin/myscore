@@ -34,10 +34,8 @@ class RoomUserSettingsRepositoryTest {
     @Test
     fun genericConfigsAreStoredByName() = runTest {
         repository.setLibraryUri("content://scores")
-        repository.setLastScoreUri("content://scores/bach.pdf")
 
         assertEquals("content://scores", repository.libraryUri.first())
-        assertEquals("content://scores/bach.pdf", repository.lastScoreUri.first())
     }
 
     @Test

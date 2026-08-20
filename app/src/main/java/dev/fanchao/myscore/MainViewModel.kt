@@ -40,7 +40,6 @@ data class FileClipboard(val entry: LibraryEntry, val mode: FileTransferMode)
 
 data class MainUiState(
     val libraryUri: String? = null,
-    val lastScoreUri: String? = null,
     val library: LibraryUiState = LibraryUiState(),
     val paperModeEnabled: Boolean = false,
 )
@@ -53,11 +52,10 @@ class MainViewModel(
     private val _libraryState = MutableStateFlow(LibraryUiState())
     val uiState: StateFlow<MainUiState> = combine(
         settings.libraryUri,
-        settings.lastScoreUri,
         settings.paperModeEnabled,
         _libraryState,
-    ) { libraryUri, lastScoreUri, paperModeEnabled, libraryState ->
-        MainUiState(libraryUri, lastScoreUri, libraryState, paperModeEnabled)
+    ) { libraryUri, paperModeEnabled, libraryState ->
+        MainUiState(libraryUri, libraryState, paperModeEnabled)
     }.stateIn(
         scope = viewModelScope,
         started = SharingStarted.WhileSubscribed(5_000),
@@ -320,10 +318,6 @@ class MainViewModel(
 
     fun savePaperModeEnabled(enabled: Boolean) {
         viewModelScope.launch { settings.setPaperModeEnabled(enabled) }
-    }
-
-    fun recordOpenedScore(uri: String) {
-        viewModelScope.launch { settings.setLastScoreUri(uri) }
     }
 }
 
