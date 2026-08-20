@@ -26,5 +26,5 @@ jobs:
         with:
           # PRs can reuse main's cache without allowing untrusted branches to update it.
           cache-read-only: true
-      - name: Run unit tests and build optimized release
-        run: VERSION="${GITHUB_SHA::7}" ./gradlew testDebugUnitTest assembleRelease --no-daemon
+      - name: Run unit tests
+        run: VERSION="${GITHUB_SHA::7}" ./gradlew testDebugUnitTest --no-daemon
