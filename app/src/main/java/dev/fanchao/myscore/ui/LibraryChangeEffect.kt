@@ -20,13 +20,15 @@ internal fun LibraryChangeEffect(uri: Uri?, onChanged: () -> Unit) {
         val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
             override fun onChange(selfChange: Boolean) = onChanged()
         }
-        context.contentResolver.registerContentObserver(uri, true, observer)
+        val registeredObserver = runCatching {
+            context.contentResolver.registerContentObserver(uri, true, observer)
+        }.isSuccess
         val lifecycleObserver = LifecycleEventObserver { _, event ->
             if (event == Lifecycle.Event.ON_RESUME) onChanged()
         }
         lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
         onDispose {
-            context.contentResolver.unregisterContentObserver(observer)
+            if (registeredObserver) context.contentResolver.unregisterContentObserver(observer)
             lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
         }
     }
