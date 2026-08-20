@@ -42,6 +42,16 @@ class MainViewModelTest {
     }
 
     @Test
+    fun `choosing a folder updates ui state even before screen collection resumes`() = runTest {
+        val viewModel = MainViewModel(settings, library)
+
+        viewModel.setLibraryFolder("content://scores")
+        advanceUntilIdle()
+
+        assertEquals("content://scores", viewModel.uiState.value.libraryUri)
+    }
+
+    @Test
     fun `refresh exposes repository errors in immutable ui state`() = runTest {
         val viewModel = observedViewModel()
         library.failure = IllegalStateException("Folder unavailable")
