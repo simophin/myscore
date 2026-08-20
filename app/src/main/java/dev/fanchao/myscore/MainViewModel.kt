@@ -58,7 +58,7 @@ class MainViewModel(
         MainUiState(libraryUri, lastScoreUri, libraryState)
     }.stateIn(
         scope = viewModelScope,
-        started = SharingStarted.Eagerly,
+        started = SharingStarted.WhileSubscribed(5_000),
         initialValue = MainUiState(),
     )
     private var refreshJob: Job? = null
