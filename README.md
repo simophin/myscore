@@ -8,8 +8,11 @@ A local-first, root-confined Android sheet-music file browser and PDF reader bui
   <img src="docs/screenshots/score-library.png" alt="MyScore library containing three public-domain scores" width="360">
   <img src="docs/screenshots/score-reader.png" alt="MyScore displaying Bach's Prelude in C major" width="360">
 </p>
+<p align="center">
+  <img src="docs/screenshots/two-page-reader.png" alt="MyScore displaying two score pages side by side in landscape" width="720">
+</p>
 
-Browse a folder of scores, then open a PDF in the focused, swipeable reader. These screenshots were captured on a Samsung Galaxy A32 using J. S. Bach's public-domain [Prelude in C major, BWV 846](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=5) from the Mutopia Project.
+Browse a folder of scores, then open a PDF in the focused, swipeable reader with single- and two-page layouts. These screenshots were captured on a Samsung Galaxy A32 using J. S. Bach's public-domain [Prelude in C major, BWV 846](https://www.mutopiaproject.org/cgibin/piece-info.cgi?id=5) from the Mutopia Project.
 
 ## Run
 
