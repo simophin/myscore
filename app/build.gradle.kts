@@ -10,6 +10,8 @@ room {
     schemaDirectory("$projectDir/schemas")
 }
 
+val appVersionName = providers.environmentVariable("VERSION").orElse("dev")
+
 android {
     namespace = "dev.fanchao.myscore"
     compileSdk = 37
@@ -19,11 +21,12 @@ android {
         minSdk = 23
         targetSdk = 37
         versionCode = 1
-        versionName = "0.1.0"
+        versionName = appVersionName.get()
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
     buildFeatures {
+        buildConfig = true
         compose = true
     }
 

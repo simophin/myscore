@@ -123,6 +123,7 @@ class MyScoreAppTest {
                 MyScoreApp(
                     libraryUri = null,
                     libraryState = LibraryUiState(),
+                    appVersionName = "test-version",
                     onChooseFolder = {},
                     onImportPdf = {},
                     onDownloadPdf = { _, _, _, _, _ -> },
@@ -146,6 +147,7 @@ class MyScoreAppTest {
         composeRule.onNodeWithText("Score library").assertIsDisplayed()
         composeRule.onNodeWithText("Choose folder").assertIsDisplayed()
         composeRule.onNodeWithText("Import an existing PDF").assertIsDisplayed()
+        composeRule.onNodeWithText("Version test-version").assertIsDisplayed()
     }
 
     @Test

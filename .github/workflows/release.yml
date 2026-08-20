@@ -30,7 +30,12 @@ jobs:
           # Main populates the shared cache; tag/release builds only consume it.
           cache-read-only: ${{ github.event_name == 'release' }}
       - name: Build signed optimized release APK
-        run: ./gradlew assembleRelease --no-daemon
+        run: |
+          if [ "${{ github.event_name }}" = "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}" ./gradlew assembleRelease --no-daemon
+          else
+            VERSION="${GITHUB_SHA::7}" ./gradlew assembleRelease --no-daemon
+          fi
       - name: Upload release artifacts
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v7
