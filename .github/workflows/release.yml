@@ -29,20 +29,26 @@ jobs:
         with:
           # Main populates the shared cache; tag/release builds only consume it.
           cache-read-only: ${{ github.event_name == 'release' }}
-      - name: Build signed release APK without R8
+      - name: Build signed optimized release APK
         run: ./gradlew assembleRelease --no-daemon
-      - name: Upload APK artifact
+      - name: Upload release artifacts
         if: github.event_name == 'push'
         uses: actions/upload-artifact@v7
         with:
           name: myscore-release-${{ github.sha }}
-          path: app/build/outputs/apk/release/app-release.apk
+          path: |
+            app/build/outputs/apk/release/app-release.apk
+            app/build/outputs/mapping/release/mapping.txt
           if-no-files-found: error
-      - name: Give APK a release-specific name
+      - name: Give artifacts release-specific names
         if: github.event_name == 'release'
-        run: cp app/build/outputs/apk/release/app-release.apk "myscore-${{ github.event.release.tag_name }}.apk"
-      - name: Upload APK to GitHub release
+        run: |
+          cp app/build/outputs/apk/release/app-release.apk "myscore-${{ github.event.release.tag_name }}.apk"
+          cp app/build/outputs/mapping/release/mapping.txt "myscore-${{ github.event.release.tag_name }}-mapping.txt"
+      - name: Upload artifacts to GitHub release
         if: github.event_name == 'release'
         uses: softprops/action-gh-release@v3
         with:
-          files: myscore-${{ github.event.release.tag_name }}.apk
+          files: |
+            myscore-${{ github.event.release.tag_name }}.apk
+            myscore-${{ github.event.release.tag_name }}-mapping.txt
