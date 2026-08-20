@@ -1,6 +1,7 @@
 package dev.fanchao.myscore.ui
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
@@ -46,6 +47,26 @@ class PdfViewerTest {
                 pagesPerPane = 1,
                 zoomedPageIndices = emptySet(),
             ),
+        )
+    }
+
+    @Test
+    fun zoomOffsetIsResetWhenScaleIsOne() {
+        assertEquals(
+            0f,
+            constrainZoomOffset(offset = 120f, containerSize = 400, scale = 1f),
+        )
+    }
+
+    @Test
+    fun zoomOffsetIsClampedToScaledViewport() {
+        assertEquals(
+            200f,
+            constrainZoomOffset(offset = 350f, containerSize = 400, scale = 2f),
+        )
+        assertEquals(
+            -200f,
+            constrainZoomOffset(offset = -350f, containerSize = 400, scale = 2f),
         )
     }
 }
