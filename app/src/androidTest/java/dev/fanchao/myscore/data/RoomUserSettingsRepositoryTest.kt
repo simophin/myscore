@@ -58,13 +58,16 @@ class RoomUserSettingsRepositoryTest {
 
         assertEquals(0, repository.readerPage(bach).first())
         assertEquals(PageLayoutPreference.Auto, repository.readerLayout(bach).first())
+        assertEquals(false, repository.paperModeEnabled.first())
 
         repository.setReaderPage(bach, 7)
         repository.setReaderLayout(bach, PageLayoutPreference.Two)
+        repository.setPaperModeEnabled(true)
         repository.setReaderLayout(mozart, PageLayoutPreference.Single)
 
         assertEquals(7, repository.readerPage(bach).first())
         assertEquals(PageLayoutPreference.Two, repository.readerLayout(bach).first())
+        assertEquals(true, repository.paperModeEnabled.first())
         assertEquals(0, repository.readerPage(mozart).first())
         assertEquals(PageLayoutPreference.Single, repository.readerLayout(mozart).first())
     }
@@ -73,10 +76,12 @@ class RoomUserSettingsRepositoryTest {
     fun negativeReaderPagesAreClampedWithoutOverwritingLayout() = runTest {
         val uri = "content://scores/bach.pdf"
         repository.setReaderLayout(uri, PageLayoutPreference.Single)
+        repository.setPaperModeEnabled(true)
 
         repository.setReaderPage(uri, -4)
 
         assertEquals(0, repository.readerPage(uri).first())
         assertEquals(PageLayoutPreference.Single, repository.readerLayout(uri).first())
+        assertEquals(true, repository.paperModeEnabled.first())
     }
 }

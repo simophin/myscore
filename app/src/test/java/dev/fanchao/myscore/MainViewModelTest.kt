@@ -122,6 +122,17 @@ class MainViewModelTest {
     }
 
     @Test
+    fun `paper mode is persisted globally`() = runTest {
+        val viewModel = observedViewModel()
+
+        viewModel.savePaperModeEnabled(true)
+        advanceUntilIdle()
+
+        assertEquals(true, settings.paperModeEnabled.value)
+        assertEquals(true, viewModel.uiState.value.paperModeEnabled)
+    }
+
+    @Test
     fun `folder navigation remains in repository-provided tree and supports back`() = runTest {
         val viewModel = observedViewModel()
         val folder = LibraryEntry("content://scores/bach", "Bach", true, 0, 0)
@@ -198,11 +209,13 @@ class MainViewModelTest {
 private class FakeSettingsRepository : UserSettingsRepository {
     override val libraryUri = MutableStateFlow<String?>(null)
     override val lastScoreUri = MutableStateFlow<String?>(null)
+    override val paperModeEnabled = MutableStateFlow(false)
     val pages = mutableMapOf<String, MutableStateFlow<Int>>()
     val layouts = mutableMapOf<String, MutableStateFlow<PageLayoutPreference>>()
 
     override suspend fun setLibraryUri(uri: String) { libraryUri.value = uri }
     override suspend fun setLastScoreUri(uri: String) { lastScoreUri.value = uri }
+    override suspend fun setPaperModeEnabled(enabled: Boolean) { paperModeEnabled.value = enabled }
     override fun readerPage(uri: String): Flow<Int> = pages.getOrPut(uri) { MutableStateFlow(0) }
     override suspend fun setReaderPage(uri: String, page: Int) {
         pages.getOrPut(uri) { MutableStateFlow(0) }.value = page

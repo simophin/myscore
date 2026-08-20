@@ -14,6 +14,8 @@ import androidx.room.Transaction
 import androidx.room.TypeConverter
 import androidx.room.TypeConverters
 import androidx.room.Upsert
+import androidx.sqlite.db.SupportSQLiteDatabase
+import androidx.room.migration.Migration
 import kotlinx.coroutines.flow.Flow
 
 @Entity(tableName = "configs")
@@ -27,6 +29,7 @@ data class UriPreferenceEntity(
     @PrimaryKey val uri: String,
     val page: Int = 0,
     val layout: PageLayoutPreference = PageLayoutPreference.Auto,
+    val paperMode: Boolean = false,
 )
 
 class PreferenceConverters {
@@ -58,6 +61,9 @@ interface SettingsDao {
     @Query("UPDATE uri_preferences SET layout = :layout WHERE uri = :uri")
     suspend fun updateLayout(uri: String, layout: PageLayoutPreference)
 
+    @Query("UPDATE uri_preferences SET paperMode = :enabled WHERE uri = :uri")
+    suspend fun updatePaperMode(uri: String, enabled: Boolean)
+
     @Transaction
     suspend fun setPage(uri: String, page: Int) {
         insertUriPreference(UriPreferenceEntity(uri = uri))
@@ -69,11 +75,17 @@ interface SettingsDao {
         insertUriPreference(UriPreferenceEntity(uri = uri))
         updateLayout(uri, layout)
     }
+
+    @Transaction
+    suspend fun setPaperMode(uri: String, enabled: Boolean) {
+        insertUriPreference(UriPreferenceEntity(uri = uri))
+        updatePaperMode(uri, enabled)
+    }
 }
 
 @Database(
     entities = [ConfigEntity::class, UriPreferenceEntity::class],
-    version = 1,
+    version = 2,
     exportSchema = true,
 )
 @TypeConverters(PreferenceConverters::class)
@@ -81,10 +93,18 @@ abstract class MyScoreDatabase : RoomDatabase() {
     abstract fun settingsDao(): SettingsDao
 
     companion object {
+        private val MIGRATION_1_2 = object : Migration(1, 2) {
+            override fun migrate(db: SupportSQLiteDatabase) {
+                db.execSQL(
+                    "ALTER TABLE uri_preferences ADD COLUMN paperMode INTEGER NOT NULL DEFAULT 0",
+                )
+            }
+        }
+
         fun create(context: Context): MyScoreDatabase = Room.databaseBuilder(
             context.applicationContext,
             MyScoreDatabase::class.java,
             "myscore.db",
-        ).build()
+        ).addMigrations(MIGRATION_1_2).build()
     }
 }

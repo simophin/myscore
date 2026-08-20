@@ -7,6 +7,22 @@ import org.junit.Test
 
 class PdfViewerTest {
     @Test
+    fun paperModeLeavesDarkNotationUntouched() {
+        assertEquals(
+            0xFF101010.toInt(),
+            paperTonePixel(0xFF101010.toInt(), 0xFFF2E7C9.toInt()),
+        )
+    }
+
+    @Test
+    fun paperModeWarmsNearWhitePaperPixels() {
+        assertEquals(
+            0xFFF3EAD0.toInt(),
+            paperTonePixel(0xFFFCFCFC.toInt(), 0xFFF2E7C9.toInt()),
+        )
+    }
+
+    @Test
     fun pagerIsDisabledWhenCurrentSinglePageIsZoomed() {
         assertFalse(
             isPagerScrollEnabled(

@@ -68,9 +68,11 @@ private enum class AppTab(val label: String) {
 fun MyScoreApp(
     libraryUri: Uri?,
     libraryState: LibraryUiState,
+    paperModeEnabled: Boolean = false,
     appVersionName: String = BuildConfig.VERSION_NAME,
     onChooseFolder: () -> Unit,
     onImportPdf: () -> Unit,
+    onPaperModeChanged: (Boolean) -> Unit = {},
     onDownloadPdf: (String, String?, String?, String?, String?) -> Unit,
     onOpenDownloadedScore: (ScoreDocument) -> Unit,
     onRefresh: () -> Unit,
@@ -293,9 +295,11 @@ fun MyScoreApp(
                 AppTab.Settings -> SettingsScreen(
                     modifier = Modifier.padding(padding),
                     libraryUri = libraryUri,
+                    paperModeEnabled = paperModeEnabled,
                     appVersionName = appVersionName,
                     onChooseFolder = onChooseFolder,
                     onImportPdf = onImportPdf,
+                    onPaperModeChanged = onPaperModeChanged,
                 )
             }
         }
