@@ -12,9 +12,9 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -73,8 +73,11 @@ class MainActivity : ComponentActivity() {
                     }
                 }
 
-                Box(Modifier.fillMaxSize()) {
-                    val score = openScore
+                AnimatedContent(
+                    targetState = openScore,
+                    modifier = Modifier.fillMaxSize(),
+                    label = "Score browser to viewer",
+                ) { score ->
                     if (score == null) {
                         MyScoreApp(
                             libraryUri = libraryUri?.let(Uri::parse),
@@ -102,9 +105,11 @@ class MainActivity : ComponentActivity() {
                         val pageLayout by viewModel.readerLayout(score.uri)
                             .collectAsStateWithLifecycle(initialValue = null)
                         if (rememberedPage < 0 || pageLayout == null) {
-                            androidx.compose.material3.CircularProgressIndicator(
-                                Modifier.align(androidx.compose.ui.Alignment.Center),
-                            )
+                            Box(Modifier.fillMaxSize()) {
+                                androidx.compose.material3.CircularProgressIndicator(
+                                    Modifier.align(androidx.compose.ui.Alignment.Center),
+                                )
+                            }
                         } else {
                             PdfViewer(
                                 score = score,
