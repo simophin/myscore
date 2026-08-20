@@ -2,6 +2,7 @@ package dev.fanchao.myscore.ui
 
 import android.graphics.pdf.PdfRenderer
 import android.net.Uri
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -14,6 +15,7 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.lazy.grid.GridCells
 import androidx.compose.foundation.lazy.grid.LazyVerticalGrid
 import androidx.compose.foundation.lazy.grid.items
@@ -40,6 +42,9 @@ import androidx.compose.runtime.setValue
 import androidx.activity.compose.BackHandler
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
@@ -294,13 +299,14 @@ private fun FileRow(
             Modifier.fillMaxWidth().padding(start = 14.dp, top = 10.dp, bottom = 10.dp, end = 4.dp),
             verticalAlignment = Alignment.CenterVertically,
         ) {
-            Text(if (entry.isDirectory) "▰" else "♬", style = MaterialTheme.typography.headlineSmall)
+            EntryTypeIcon(isDirectory = entry.isDirectory)
             Column(Modifier.weight(1f).padding(horizontal = 12.dp)) {
-                Text(entry.name, fontWeight = FontWeight.Medium, maxLines = 1, overflow = TextOverflow.Ellipsis)
                 Text(
-                    if (entry.isDirectory) "Folder" else formatFileSize(entry.sizeBytes),
-                    style = MaterialTheme.typography.labelMedium,
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    entry.name,
+                    fontWeight = FontWeight.Medium,
+                    minLines = 2,
+                    maxLines = 2,
+                    overflow = TextOverflow.Ellipsis,
                 )
             }
             Box {
@@ -317,6 +323,34 @@ private fun FileRow(
                     DropdownMenuItem(text = { Text("Delete") }, onClick = { menuExpanded = false; onDelete() })
                 }
             }
+        }
+    }
+}
+
+@Composable
+private fun EntryTypeIcon(isDirectory: Boolean) {
+    Box(Modifier.size(32.dp), contentAlignment = Alignment.Center) {
+        if (isDirectory) {
+            val color = MaterialTheme.colorScheme.primary
+            Canvas(Modifier.size(28.dp)) {
+                val tabTop = size.height * 0.24f
+                val tabHeight = size.height * 0.22f
+                val bodyTop = size.height * 0.36f
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(size.width * 0.08f, tabTop),
+                    size = Size(size.width * 0.42f, tabHeight),
+                    cornerRadius = CornerRadius(size.width * 0.08f, size.width * 0.08f),
+                )
+                drawRoundRect(
+                    color = color,
+                    topLeft = Offset(size.width * 0.08f, bodyTop),
+                    size = Size(size.width * 0.84f, size.height * 0.42f),
+                    cornerRadius = CornerRadius(size.width * 0.1f, size.width * 0.1f),
+                )
+            }
+        } else {
+            Text("♬", style = MaterialTheme.typography.headlineSmall)
         }
     }
 }
