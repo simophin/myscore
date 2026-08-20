@@ -8,8 +8,12 @@ import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import android.net.Uri
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.awaitEachGesture
+import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
@@ -44,6 +48,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
@@ -55,7 +60,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
+import androidx.compose.ui.input.pointer.util.VelocityTracker
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.layout.onSizeChanged
 import androidx.compose.ui.platform.LocalContext
@@ -69,9 +76,11 @@ import dev.fanchao.myscore.R
 import dev.fanchao.myscore.data.ScoreDocument
 import dev.fanchao.myscore.data.PageLayoutPreference
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.ceil
+import kotlin.math.abs
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
@@ -355,10 +364,18 @@ private fun PdfPage(
     var viewportSize by remember(pageIndex) { mutableStateOf(IntSize.Zero) }
     val currentScale by rememberUpdatedState(scale)
     val currentOnZoomChanged by rememberUpdatedState(onZoomChanged)
+    val scope = rememberCoroutineScope()
+    val offsetXAnimation = remember(pageIndex) { Animatable(0f) }
+    val offsetYAnimation = remember(pageIndex) { Animatable(0f) }
+    val flingDecay = remember { exponentialDecay<Float>() }
     DisposableEffect(pageIndex) {
         onDispose { currentOnZoomChanged(false) }
     }
     val transformState = rememberTransformableState { centroid, zoomChange, panChange, _ ->
+        scope.launch {
+            offsetXAnimation.stop()
+            offsetYAnimation.stop()
+        }
         val newScale = (scale * zoomChange).coerceIn(1f, 5f)
         if (newScale == 1f) {
             offsetX = 0f
@@ -367,8 +384,16 @@ private fun PdfPage(
             val appliedZoom = newScale / scale
             val centerX = viewportSize.width / 2f
             val centerY = viewportSize.height / 2f
-            offsetX = offsetX * appliedZoom + (centroid.x - centerX) * (1f - appliedZoom) + panChange.x
-            offsetY = offsetY * appliedZoom + (centroid.y - centerY) * (1f - appliedZoom) + panChange.y
+            offsetX = constrainZoomOffset(
+                offset = offsetX * appliedZoom + (centroid.x - centerX) * (1f - appliedZoom) + panChange.x,
+                containerSize = viewportSize.width,
+                scale = newScale,
+            )
+            offsetY = constrainZoomOffset(
+                offset = offsetY * appliedZoom + (centroid.y - centerY) * (1f - appliedZoom) + panChange.y,
+                containerSize = viewportSize.height,
+                scale = newScale,
+            )
         }
         scale = newScale
         currentOnZoomChanged(newScale > 1f)
@@ -394,17 +419,97 @@ private fun PdfPage(
                     .pointerInput(pageIndex) {
                         detectTapGestures(onDoubleTap = { tap ->
                             if (currentScale > 1f) {
+                                scope.launch {
+                                    offsetXAnimation.stop()
+                                    offsetYAnimation.stop()
+                                    offsetXAnimation.snapTo(0f)
+                                    offsetYAnimation.snapTo(0f)
+                                }
                                 scale = 1f
                                 offsetX = 0f
                                 offsetY = 0f
                                 currentOnZoomChanged(false)
                             } else {
                                 scale = 2.5f
-                                offsetX = (size.width / 2f - tap.x) * 1.5f
-                                offsetY = (size.height / 2f - tap.y) * 1.5f
+                                offsetX = constrainZoomOffset(
+                                    offset = (size.width / 2f - tap.x) * 1.5f,
+                                    containerSize = size.width,
+                                    scale = scale,
+                                )
+                                offsetY = constrainZoomOffset(
+                                    offset = (size.height / 2f - tap.y) * 1.5f,
+                                    containerSize = size.height,
+                                    scale = scale,
+                                )
                                 currentOnZoomChanged(true)
                             }
                         })
+                    }
+                    .pointerInput(pageIndex) {
+                        awaitEachGesture {
+                            val down = awaitFirstDown(
+                                requireUnconsumed = false,
+                                pass = PointerEventPass.Initial,
+                            )
+                            scope.launch {
+                                offsetXAnimation.stop()
+                                offsetYAnimation.stop()
+                            }
+                            if (currentScale <= 1f) return@awaitEachGesture
+
+                            val velocityTracker = VelocityTracker()
+                            velocityTracker.addPosition(down.uptimeMillis, down.position)
+                            var activePointer = down.id
+                            var singlePointerPan = true
+
+                            do {
+                                val event = awaitPointerEvent(PointerEventPass.Initial)
+                                val pressedChanges = event.changes.filter { it.pressed }
+                                if (pressedChanges.size > 1) singlePointerPan = false
+                                val activeChange = event.changes.firstOrNull { it.id == activePointer }
+                                    ?: pressedChanges.firstOrNull()?.also { activePointer = it.id }
+
+                                if (
+                                    singlePointerPan &&
+                                    activeChange != null &&
+                                    activeChange.pressed &&
+                                    pressedChanges.size == 1
+                                ) {
+                                    velocityTracker.addPosition(
+                                        activeChange.uptimeMillis,
+                                        activeChange.position,
+                                    )
+                                }
+                            } while (event.changes.any { it.pressed })
+
+                            if (!singlePointerPan || currentScale <= 1f) return@awaitEachGesture
+
+                            val velocity = velocityTracker.calculateVelocity()
+                            if (
+                                abs(velocity.x) < ZoomFlingMinimumVelocity &&
+                                abs(velocity.y) < ZoomFlingMinimumVelocity
+                            ) {
+                                return@awaitEachGesture
+                            }
+                            scope.launch {
+                                val maxOffsetX = zoomOffsetLimit(viewportSize.width, scale)
+                                val maxOffsetY = zoomOffsetLimit(viewportSize.height, scale)
+                                offsetXAnimation.updateBounds(-maxOffsetX, maxOffsetX)
+                                offsetYAnimation.updateBounds(-maxOffsetY, maxOffsetY)
+                                offsetXAnimation.snapTo(offsetX)
+                                offsetYAnimation.snapTo(offsetY)
+                                launch {
+                                    offsetXAnimation.animateDecay(velocity.x, flingDecay) {
+                                        offsetX = value
+                                    }
+                                }
+                                launch {
+                                    offsetYAnimation.animateDecay(velocity.y, flingDecay) {
+                                        offsetY = value
+                                    }
+                                }
+                            }
+                        }
                     }
                     .transformable(
                         state = transformState,
@@ -416,6 +521,8 @@ private fun PdfPage(
     }
 }
 
+private const val ZoomFlingMinimumVelocity = 80f
+
 internal fun isPagerScrollEnabled(
     currentPane: Int,
     pagesPerPane: Int,
@@ -423,6 +530,16 @@ internal fun isPagerScrollEnabled(
 ): Boolean {
     val firstPage = currentPane * pagesPerPane
     return (firstPage until firstPage + pagesPerPane).none(zoomedPageIndices::contains)
+}
+
+internal fun constrainZoomOffset(offset: Float, containerSize: Int, scale: Float): Float {
+    if (scale <= 1f) return 0f
+    val limit = zoomOffsetLimit(containerSize, scale)
+    return offset.coerceIn(-limit, limit)
+}
+
+private fun zoomOffsetLimit(containerSize: Int, scale: Float): Float {
+    return (containerSize * (scale - 1f) / 2f).coerceAtLeast(0f)
 }
 
 private fun Set<Int>.withZoomState(pageIndex: Int, zoomed: Boolean): Set<Int> = when {

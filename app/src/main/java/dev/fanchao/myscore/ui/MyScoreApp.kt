@@ -50,6 +50,7 @@ import androidx.compose.ui.semantics.contentDescription
 import androidx.compose.ui.semantics.semantics
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import dev.fanchao.myscore.BuildConfig
 import dev.fanchao.myscore.LibraryUiState
 import dev.fanchao.myscore.R
 import dev.fanchao.myscore.data.LibraryEntry
@@ -66,6 +67,7 @@ private enum class AppTab(val label: String) {
 fun MyScoreApp(
     libraryUri: Uri?,
     libraryState: LibraryUiState,
+    appVersionName: String = BuildConfig.VERSION_NAME,
     onChooseFolder: () -> Unit,
     onImportPdf: () -> Unit,
     onDownloadPdf: (String, String?, String?, String?, String?) -> Unit,
@@ -288,6 +290,7 @@ fun MyScoreApp(
                 AppTab.Settings -> SettingsScreen(
                     modifier = Modifier.padding(padding),
                     libraryUri = libraryUri,
+                    appVersionName = appVersionName,
                     onChooseFolder = onChooseFolder,
                     onImportPdf = onImportPdf,
                 )

@@ -50,7 +50,8 @@ internal fun MyScoreNavigation(
     onChooseFolder: (Uri?) -> Unit,
     onImportPdf: () -> Unit,
 ) {
-    val uiState by viewModel.uiState.collectAsStateWithLifecycle()
+    val uiStateState = viewModel.uiState.collectAsStateWithLifecycle()
+    val uiState = uiStateState.value
     val libraryUri = uiState.libraryUri
     val libraryState = uiState.library
     val lastScoreUri = uiState.lastScoreUri
@@ -96,10 +97,13 @@ internal fun MyScoreNavigation(
         entryProvider = { route ->
             when (route) {
                 ScoresRoute -> NavEntry(route) {
+                    val currentUiState = uiStateState.value
+                    val currentLibraryUri = currentUiState.libraryUri
+                    val currentLibraryState = currentUiState.library
                     MyScoreApp(
-                        libraryUri = libraryUri?.let(Uri::parse),
-                        libraryState = libraryState,
-                        onChooseFolder = { onChooseFolder(libraryUri?.let(Uri::parse)) },
+                        libraryUri = currentLibraryUri?.let(Uri::parse),
+                        libraryState = currentLibraryState,
+                        onChooseFolder = { onChooseFolder(currentLibraryUri?.let(Uri::parse)) },
                         onImportPdf = onImportPdf,
                         onDownloadPdf = viewModel::downloadPdf,
                         onOpenDownloadedScore = navigateToScore,
