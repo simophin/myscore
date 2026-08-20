@@ -38,6 +38,7 @@ import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.key
@@ -173,6 +174,9 @@ fun PdfViewer(
                                     .coerceIn(0, (paneCount - 1).coerceAtLeast(0)),
                                 pageCount = { paneCount },
                             )
+                            var zoomedPageIndices by remember(effectivePagesPerPane) {
+                                mutableStateOf(emptySet<Int>())
+                            }
                             LaunchedEffect(pagerState, effectivePagesPerPane) {
                                 snapshotFlow { pagerState.settledPage }
                                     .distinctUntilChanged()
@@ -187,15 +191,40 @@ fun PdfViewer(
                                     .background(MaterialTheme.colorScheme.surfaceContainerHighest),
                                 beyondViewportPageCount = 1,
                                 pageSpacing = 8.dp,
+                                userScrollEnabled = isPagerScrollEnabled(
+                                    currentPane = pagerState.currentPage,
+                                    pagesPerPane = effectivePagesPerPane,
+                                    zoomedPageIndices = zoomedPageIndices,
+                                ),
                             ) { paneIndex ->
                                 val firstPage = paneIndex * effectivePagesPerPane
                                 androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
-                                    PdfPage(pdf.renderer, firstPage, Modifier.weight(1f))
+                                    PdfPage(
+                                        renderer = pdf.renderer,
+                                        pageIndex = firstPage,
+                                        modifier = Modifier.weight(1f),
+                                        onZoomChanged = { zoomed ->
+                                            zoomedPageIndices = zoomedPageIndices.withZoomState(
+                                                firstPage,
+                                                zoomed,
+                                            )
+                                        },
+                                    )
                                     if (
                                         effectivePagesPerPane == 2 &&
                                         firstPage + 1 < pdf.renderer.pageCount
                                     ) {
-                                        PdfPage(pdf.renderer, firstPage + 1, Modifier.weight(1f))
+                                        PdfPage(
+                                            renderer = pdf.renderer,
+                                            pageIndex = firstPage + 1,
+                                            modifier = Modifier.weight(1f),
+                                            onZoomChanged = { zoomed ->
+                                                zoomedPageIndices = zoomedPageIndices.withZoomState(
+                                                    firstPage + 1,
+                                                    zoomed,
+                                                )
+                                            },
+                                        )
                                     }
                                 }
                             }
@@ -260,7 +289,12 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 }
 
 @Composable
-private fun PdfPage(renderer: PdfRenderer, pageIndex: Int, modifier: Modifier = Modifier) {
+private fun PdfPage(
+    renderer: PdfRenderer,
+    pageIndex: Int,
+    modifier: Modifier = Modifier,
+    onZoomChanged: (Boolean) -> Unit,
+) {
     val bitmap by produceState<Bitmap?>(initialValue = null, renderer, pageIndex) {
         value = withContext(Dispatchers.IO) {
             synchronized(renderer) {
@@ -280,6 +314,11 @@ private fun PdfPage(renderer: PdfRenderer, pageIndex: Int, modifier: Modifier = 
     var offsetX by remember(pageIndex) { mutableFloatStateOf(0f) }
     var offsetY by remember(pageIndex) { mutableFloatStateOf(0f) }
     var viewportSize by remember(pageIndex) { mutableStateOf(IntSize.Zero) }
+    val currentScale by rememberUpdatedState(scale)
+    val currentOnZoomChanged by rememberUpdatedState(onZoomChanged)
+    DisposableEffect(pageIndex) {
+        onDispose { currentOnZoomChanged(false) }
+    }
     val transformState = rememberTransformableState { centroid, zoomChange, panChange, _ ->
         val newScale = (scale * zoomChange).coerceIn(1f, 5f)
         if (newScale == 1f) {
@@ -293,6 +332,7 @@ private fun PdfPage(renderer: PdfRenderer, pageIndex: Int, modifier: Modifier = 
             offsetY = offsetY * appliedZoom + (centroid.y - centerY) * (1f - appliedZoom) + panChange.y
         }
         scale = newScale
+        currentOnZoomChanged(newScale > 1f)
     }
     Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
         val rendered = bitmap
@@ -312,16 +352,18 @@ private fun PdfPage(renderer: PdfRenderer, pageIndex: Int, modifier: Modifier = 
                         translationX = offsetX,
                         translationY = offsetY,
                     )
-                    .pointerInput(pageIndex, scale) {
+                    .pointerInput(pageIndex) {
                         detectTapGestures(onDoubleTap = { tap ->
-                            if (scale > 1f) {
+                            if (currentScale > 1f) {
                                 scale = 1f
                                 offsetX = 0f
                                 offsetY = 0f
+                                currentOnZoomChanged(false)
                             } else {
                                 scale = 2.5f
                                 offsetX = (size.width / 2f - tap.x) * 1.5f
                                 offsetY = (size.height / 2f - tap.y) * 1.5f
+                                currentOnZoomChanged(true)
                             }
                         })
                     }
@@ -333,4 +375,19 @@ private fun PdfPage(renderer: PdfRenderer, pageIndex: Int, modifier: Modifier = 
             )
         }
     }
+}
+
+internal fun isPagerScrollEnabled(
+    currentPane: Int,
+    pagesPerPane: Int,
+    zoomedPageIndices: Set<Int>,
+): Boolean {
+    val firstPage = currentPane * pagesPerPane
+    return (firstPage until firstPage + pagesPerPane).none(zoomedPageIndices::contains)
+}
+
+private fun Set<Int>.withZoomState(pageIndex: Int, zoomed: Boolean): Set<Int> = when {
+    zoomed && pageIndex !in this -> this + pageIndex
+    !zoomed && pageIndex in this -> this - pageIndex
+    else -> this
 }

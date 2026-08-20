@@ -8,6 +8,9 @@ import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.swipeLeft
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.espresso.Espresso.pressBack
@@ -31,6 +34,7 @@ class DeepLinkReaderTest {
         val document = PdfDocument()
         try {
             document.startPage(PdfDocument.PageInfo.Builder(600, 800, 1).create()).also(document::finishPage)
+            document.startPage(PdfDocument.PageInfo.Builder(600, 800, 2).create()).also(document::finishPage)
             FileOutputStream(pdf).use(document::writeTo)
         } finally {
             document.close()
@@ -48,12 +52,18 @@ class DeepLinkReaderTest {
         val scenario = ActivityScenario.launch<MainActivity>(intent)
         try {
             composeRule.onNodeWithText("Deep Link Score").assertIsDisplayed()
-            composeRule.onNodeWithText("1 pages").assertIsDisplayed()
+            composeRule.onNodeWithText("2 pages").assertIsDisplayed()
             composeRule.onNodeWithContentDescription("Page layout: Auto").performClick()
             composeRule.onNodeWithText("Single page").performClick()
             composeRule.onNodeWithContentDescription("Page layout: Single page").assertIsDisplayed()
             scenario.recreate()
             composeRule.onNodeWithContentDescription("Page layout: Single page").assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Page 1").performTouchInput { doubleClick() }
+            composeRule.onNodeWithContentDescription("Page 1").performTouchInput { swipeLeft() }
+            composeRule.onNodeWithContentDescription("Page 1").assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Page 1").performTouchInput { doubleClick() }
+            composeRule.onNodeWithContentDescription("Page 1").performTouchInput { swipeLeft() }
+            composeRule.onNodeWithContentDescription("Page 2").assertIsDisplayed()
             composeRule.onNodeWithContentDescription("Enter full screen").performClick()
             composeRule.onNodeWithContentDescription("Exit full screen").assertIsDisplayed()
             pressBack()
