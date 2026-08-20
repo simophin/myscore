@@ -41,9 +41,11 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
+import androidx.compose.material3.TopAppBarDefaults
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.SideEffect
 import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableStateOf
@@ -59,8 +61,11 @@ import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.keepScreenOn
+import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.luminance
+import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -115,7 +120,13 @@ fun PdfViewer(
     var fullScreen by rememberSaveable(score.uri) { mutableStateOf(false) }
     var readerOptionsExpanded by remember { mutableStateOf(false) }
     var anchorPage by remember(score.uri) { mutableIntStateOf(initialPage) }
+    val documentBackgroundColor = paperModeBackgroundColor(paperModeEnabled)
     ImmersiveSystemBars(fullScreen)
+    ReaderSystemBars(
+        paperModeEnabled = paperModeEnabled,
+        fullScreen = fullScreen,
+        backgroundColor = documentBackgroundColor,
+    )
     BackHandler {
         if (fullScreen) fullScreen = false else onBack()
     }
@@ -129,11 +140,20 @@ fun PdfViewer(
         onDispose { openPdf?.close() }
     }
 
-    Box(Modifier.fillMaxSize().keepScreenOn()) {
+    Box(
+        Modifier
+            .fillMaxSize()
+            .background(documentBackgroundColor)
+            .keepScreenOn(),
+    ) {
     Scaffold(
+        containerColor = documentBackgroundColor,
         topBar = {
             if (!fullScreen) {
                 TopAppBar(
+                    colors = TopAppBarDefaults.topAppBarColors(
+                        containerColor = documentBackgroundColor,
+                    ),
                     navigationIcon = {
                         IconButton(onClick = onBack) {
                             Icon(
@@ -277,8 +297,9 @@ fun PdfViewer(
                             }
                             HorizontalPager(
                                 state = pagerState,
-                                modifier = Modifier.fillMaxSize()
-                                    .background(MaterialTheme.colorScheme.surfaceContainerHighest),
+                                modifier = Modifier
+                                    .fillMaxSize()
+                                    .background(documentBackgroundColor),
                                 beyondViewportPageCount = 1,
                                 pageSpacing = 8.dp,
                                 userScrollEnabled = isPagerScrollEnabled(
@@ -375,6 +396,25 @@ private fun ImmersiveSystemBars(enabled: Boolean) {
         }
         onDispose {
             if (enabled) controller.show(WindowInsetsCompat.Type.systemBars())
+        }
+    }
+}
+
+@Composable
+private fun ReaderSystemBars(
+    paperModeEnabled: Boolean,
+    fullScreen: Boolean,
+    backgroundColor: ComposeColor,
+) {
+    val activity = LocalContext.current.findActivity() ?: return
+    val usePaperSystemBars = paperModeEnabled && fullScreen
+    SideEffect {
+        activity.window.statusBarColor = if (usePaperSystemBars) backgroundColor.toArgb() else Color.TRANSPARENT
+        activity.window.navigationBarColor = if (usePaperSystemBars) backgroundColor.toArgb() else Color.TRANSPARENT
+        WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
+            val useDarkIcons = backgroundColor.luminance() > 0.5f
+            isAppearanceLightStatusBars = useDarkIcons
+            isAppearanceLightNavigationBars = useDarkIcons
         }
     }
 }
@@ -619,6 +659,9 @@ private const val PAPER_COLOR = 0xFFF2E7C9.toInt()
 private const val PAPER_MIN_LIGHTNESS = 215
 private const val PAPER_MAX_CHROMA = 18
 private const val PAPER_MAX_BLEND = 0.92f
+
+internal fun paperModeBackgroundColor(enabled: Boolean): ComposeColor =
+    if (enabled) ComposeColor(PAPER_COLOR) else ComposeColor.White
 
 private fun applyPaperMode(bitmap: Bitmap) {
     val width = bitmap.width
