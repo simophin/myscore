@@ -1,11 +1,20 @@
 package dev.fanchao.myscore.ui
 
+import androidx.compose.ui.graphics.Color
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PdfViewerTest {
+    @Test
+    fun paperModeBackgroundUsesPaperColorWhenEnabled() {
+        assertEquals(
+            Color(0xFFF2E7C9),
+            paperModeBackgroundColor(enabled = true),
+        )
+    }
+
     @Test
     fun paperModeLeavesDarkNotationUntouched() {
         assertEquals(
