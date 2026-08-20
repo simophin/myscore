@@ -12,20 +12,46 @@ import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.animation.AnimatedContent
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Modifier
 import androidx.lifecycle.compose.collectAsStateWithLifecycle
 import androidx.lifecycle.viewmodel.compose.viewModel
+import androidx.navigation3.runtime.NavEntry
+import androidx.navigation3.runtime.NavKey
+import androidx.navigation3.runtime.rememberNavBackStack
+import androidx.navigation3.ui.NavDisplay
+import dev.fanchao.myscore.data.ScoreDocument
 import dev.fanchao.myscore.ui.MyScoreApp
 import dev.fanchao.myscore.ui.PdfViewer
 import dev.fanchao.myscore.ui.theme.MyScoreTheme
+import kotlinx.serialization.Serializable
+
+@Serializable
+private data object ScoresRoute : NavKey
+
+@Serializable
+private data class ScoreViewerRoute(
+    val uri: String,
+    val title: String,
+    val sizeBytes: Long,
+    val modifiedAtMillis: Long,
+) : NavKey {
+    constructor(score: ScoreDocument) : this(
+        uri = score.uri,
+        title = score.title,
+        sizeBytes = score.sizeBytes,
+        modifiedAtMillis = score.modifiedAtMillis,
+    )
+
+    fun toScoreDocument() = ScoreDocument(uri, title, sizeBytes, modifiedAtMillis)
+}
 
 class MainActivity : ComponentActivity() {
     private val intentScore = androidx.compose.runtime.mutableStateOf<dev.fanchao.myscore.data.ScoreDocument?>(null)
@@ -45,9 +71,23 @@ class MainActivity : ComponentActivity() {
                 val libraryUri = uiState.libraryUri
                 val libraryState = uiState.library
                 val lastScoreUri = uiState.lastScoreUri
-                var selectedScore by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<dev.fanchao.myscore.data.ScoreDocument?>(null) }
                 var restoredLastScore by rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
-                val openScore = intentScore.value ?: selectedScore
+                val initialRoutes = remember {
+                    intentScore.value?.let { arrayOf<NavKey>(ScoresRoute, ScoreViewerRoute(it)) }
+                        ?: arrayOf<NavKey>(ScoresRoute)
+                }
+                val backStack = rememberNavBackStack(*initialRoutes)
+                val navigateToScore: (ScoreDocument) -> Unit = { score ->
+                    if ((backStack.lastOrNull() as? ScoreViewerRoute)?.uri != score.uri) {
+                        backStack.add(ScoreViewerRoute(score))
+                    }
+                }
+                val navigateBack: () -> Unit = {
+                    val popped = backStack.removeLastOrNull()
+                    if (popped is ScoreViewerRoute && popped.uri == intentScore.value?.uri) {
+                        intentScore.value = null
+                    }
+                }
 
                 val folderPicker = rememberLauncherForActivityResult(
                     ActivityResultContracts.OpenDocumentTree(),
@@ -66,65 +106,74 @@ class MainActivity : ComponentActivity() {
                     if (libraryUri != null && libraryState.scores.isEmpty()) viewModel.refresh(libraryUri)
                 }
                 ObserveLibraryChanges(libraryUri?.let(Uri::parse)) { viewModel.refresh() }
+                LaunchedEffect(intentScore.value) {
+                    intentScore.value?.let(navigateToScore)
+                }
                 LaunchedEffect(lastScoreUri, libraryState.initialized, libraryState.scores) {
                     if (!restoredLastScore && lastScoreUri != null && libraryState.initialized) {
-                        selectedScore = libraryState.scores.firstOrNull { it.uri == lastScoreUri }
+                        if (backStack.size == 1) {
+                            libraryState.scores.firstOrNull { it.uri == lastScoreUri }
+                                ?.let(navigateToScore)
+                        }
                         restoredLastScore = true
                     }
                 }
 
-                AnimatedContent(
-                    targetState = openScore,
+                NavDisplay(
+                    backStack = backStack,
                     modifier = Modifier.fillMaxSize(),
-                    label = "Score browser to viewer",
-                ) { score ->
-                    if (score == null) {
-                        MyScoreApp(
-                            libraryUri = libraryUri?.let(Uri::parse),
-                            libraryState = libraryState,
-                            onChooseFolder = { folderPicker.launch(libraryUri?.let(Uri::parse)) },
-                            onImportPdf = { pdfPicker.launch(arrayOf("application/pdf")) },
-                            onDownloadPdf = viewModel::downloadPdf,
-                            onOpenDownloadedScore = { selectedScore = it },
-                            onRefresh = viewModel::refresh,
-                            onOpenScore = { selectedScore = it },
-                            onOpenDirectory = viewModel::openDirectory,
-                            onNavigateUp = viewModel::navigateUp,
-                            onCopy = viewModel::stageCopy,
-                            onMove = viewModel::stageMove,
-                            onPaste = viewModel::paste,
-                            onClearClipboard = viewModel::clearClipboard,
-                            onCreateFolder = viewModel::createFolder,
-                            onRename = viewModel::rename,
-                            onDelete = viewModel::delete,
-                        )
-                    } else {
-                        LaunchedEffect(score.uri) { viewModel.recordOpenedScore(score.uri) }
-                        val rememberedPage by viewModel.readerPage(score.uri)
-                            .collectAsStateWithLifecycle(initialValue = -1)
-                        val pageLayout by viewModel.readerLayout(score.uri)
-                            .collectAsStateWithLifecycle(initialValue = null)
-                        if (rememberedPage < 0 || pageLayout == null) {
-                            Box(Modifier.fillMaxSize()) {
-                                androidx.compose.material3.CircularProgressIndicator(
-                                    Modifier.align(androidx.compose.ui.Alignment.Center),
+                    onBack = navigateBack,
+                    entryProvider = { route ->
+                        when (route) {
+                            ScoresRoute -> NavEntry(route) {
+                                MyScoreApp(
+                                    libraryUri = libraryUri?.let(Uri::parse),
+                                    libraryState = libraryState,
+                                    onChooseFolder = { folderPicker.launch(libraryUri?.let(Uri::parse)) },
+                                    onImportPdf = { pdfPicker.launch(arrayOf("application/pdf")) },
+                                    onDownloadPdf = viewModel::downloadPdf,
+                                    onOpenDownloadedScore = navigateToScore,
+                                    onRefresh = viewModel::refresh,
+                                    onOpenScore = navigateToScore,
+                                    onOpenDirectory = viewModel::openDirectory,
+                                    onNavigateUp = viewModel::navigateUp,
+                                    onCopy = viewModel::stageCopy,
+                                    onMove = viewModel::stageMove,
+                                    onPaste = viewModel::paste,
+                                    onClearClipboard = viewModel::clearClipboard,
+                                    onCreateFolder = viewModel::createFolder,
+                                    onRename = viewModel::rename,
+                                    onDelete = viewModel::delete,
                                 )
                             }
-                        } else {
-                            PdfViewer(
-                                score = score,
-                                initialPage = rememberedPage,
-                                layoutPreference = requireNotNull(pageLayout),
-                                onPageChanged = { viewModel.saveReaderPage(score.uri, it) },
-                                onLayoutPreferenceChanged = { viewModel.saveReaderLayout(score.uri, it) },
-                                onBack = {
-                                    intentScore.value = null
-                                    selectedScore = null
-                                },
-                            )
+                            is ScoreViewerRoute -> NavEntry(route) {
+                                val score = route.toScoreDocument()
+                                LaunchedEffect(score.uri) { viewModel.recordOpenedScore(score.uri) }
+                                val rememberedPage by viewModel.readerPage(score.uri)
+                                    .collectAsStateWithLifecycle(initialValue = -1)
+                                val pageLayout by viewModel.readerLayout(score.uri)
+                                    .collectAsStateWithLifecycle(initialValue = null)
+                                if (rememberedPage < 0 || pageLayout == null) {
+                                    Box(Modifier.fillMaxSize()) {
+                                        androidx.compose.material3.CircularProgressIndicator(
+                                            Modifier.align(androidx.compose.ui.Alignment.Center),
+                                        )
+                                    }
+                                } else {
+                                    PdfViewer(
+                                        score = score,
+                                        initialPage = rememberedPage,
+                                        layoutPreference = requireNotNull(pageLayout),
+                                        onPageChanged = { viewModel.saveReaderPage(score.uri, it) },
+                                        onLayoutPreferenceChanged = { viewModel.saveReaderLayout(score.uri, it) },
+                                        onBack = navigateBack,
+                                    )
+                                }
+                            }
+                            else -> error("Unknown navigation route: $route")
                         }
                     }
-                }
+                )
             }
         }
     }
