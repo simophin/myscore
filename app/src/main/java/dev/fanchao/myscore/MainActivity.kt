@@ -1,30 +1,18 @@
 package dev.fanchao.myscore
 
 import android.content.Intent
-import android.database.ContentObserver
 import android.net.Uri
 import android.os.Bundle
-import android.os.Handler
-import android.os.Looper
 import android.provider.OpenableColumns
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
 import androidx.activity.result.contract.ActivityResultContracts
-import androidx.compose.foundation.layout.Box
-import androidx.compose.foundation.layout.fillMaxSize
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.runtime.LaunchedEffect
-import androidx.compose.runtime.DisposableEffect
-import androidx.compose.runtime.getValue
-import androidx.compose.runtime.setValue
-import androidx.compose.runtime.saveable.rememberSaveable
-import androidx.compose.ui.Modifier
-import androidx.lifecycle.compose.collectAsStateWithLifecycle
+import androidx.compose.runtime.remember
 import androidx.lifecycle.viewmodel.compose.viewModel
-import dev.fanchao.myscore.ui.MyScoreApp
-import dev.fanchao.myscore.ui.PdfViewer
+import dev.fanchao.myscore.data.ScoreDocument
+import dev.fanchao.myscore.ui.MyScoreNavigation
 import dev.fanchao.myscore.ui.theme.MyScoreTheme
 
 class MainActivity : ComponentActivity() {
@@ -37,17 +25,10 @@ class MainActivity : ComponentActivity() {
         setContent {
             MyScoreTheme {
                 val app = application as MyScoreApplication
-                val factory = androidx.compose.runtime.remember {
+                val factory = remember {
                     MainViewModelFactory(app.settingsRepository, app.libraryRepository)
                 }
                 val viewModel: MainViewModel = viewModel(factory = factory)
-                val uiState by viewModel.uiState.collectAsStateWithLifecycle()
-                val libraryUri = uiState.libraryUri
-                val libraryState = uiState.library
-                val lastScoreUri = uiState.lastScoreUri
-                var selectedScore by androidx.compose.runtime.remember { androidx.compose.runtime.mutableStateOf<dev.fanchao.myscore.data.ScoreDocument?>(null) }
-                var restoredLastScore by rememberSaveable { androidx.compose.runtime.mutableStateOf(false) }
-                val openScore = intentScore.value ?: selectedScore
 
                 val folderPicker = rememberLauncherForActivityResult(
                     ActivityResultContracts.OpenDocumentTree(),
@@ -62,64 +43,13 @@ class MainActivity : ComponentActivity() {
                     ActivityResultContracts.OpenDocument(),
                 ) { uri -> if (uri != null) viewModel.importPdf(uri.toString()) }
 
-                LaunchedEffect(libraryUri) {
-                    if (libraryUri != null && libraryState.scores.isEmpty()) viewModel.refresh(libraryUri)
-                }
-                ObserveLibraryChanges(libraryUri?.let(Uri::parse)) { viewModel.refresh() }
-                LaunchedEffect(lastScoreUri, libraryState.initialized, libraryState.scores) {
-                    if (!restoredLastScore && lastScoreUri != null && libraryState.initialized) {
-                        selectedScore = libraryState.scores.firstOrNull { it.uri == lastScoreUri }
-                        restoredLastScore = true
-                    }
-                }
-
-                Box(Modifier.fillMaxSize()) {
-                    val score = openScore
-                    if (score == null) {
-                        MyScoreApp(
-                            libraryUri = libraryUri?.let(Uri::parse),
-                            libraryState = libraryState,
-                            onChooseFolder = { folderPicker.launch(libraryUri?.let(Uri::parse)) },
-                            onImportPdf = { pdfPicker.launch(arrayOf("application/pdf")) },
-                            onDownloadPdf = viewModel::downloadPdf,
-                            onOpenDownloadedScore = { selectedScore = it },
-                            onRefresh = viewModel::refresh,
-                            onOpenScore = { selectedScore = it },
-                            onOpenDirectory = viewModel::openDirectory,
-                            onNavigateUp = viewModel::navigateUp,
-                            onCopy = viewModel::stageCopy,
-                            onMove = viewModel::stageMove,
-                            onPaste = viewModel::paste,
-                            onClearClipboard = viewModel::clearClipboard,
-                            onCreateFolder = viewModel::createFolder,
-                            onRename = viewModel::rename,
-                            onDelete = viewModel::delete,
-                        )
-                    } else {
-                        LaunchedEffect(score.uri) { viewModel.recordOpenedScore(score.uri) }
-                        val rememberedPage by viewModel.readerPage(score.uri)
-                            .collectAsStateWithLifecycle(initialValue = -1)
-                        val pageLayout by viewModel.readerLayout(score.uri)
-                            .collectAsStateWithLifecycle(initialValue = null)
-                        if (rememberedPage < 0 || pageLayout == null) {
-                            androidx.compose.material3.CircularProgressIndicator(
-                                Modifier.align(androidx.compose.ui.Alignment.Center),
-                            )
-                        } else {
-                            PdfViewer(
-                                score = score,
-                                initialPage = rememberedPage,
-                                layoutPreference = requireNotNull(pageLayout),
-                                onPageChanged = { viewModel.saveReaderPage(score.uri, it) },
-                                onLayoutPreferenceChanged = { viewModel.saveReaderLayout(score.uri, it) },
-                                onBack = {
-                                    intentScore.value = null
-                                    selectedScore = null
-                                },
-                            )
-                        }
-                    }
-                }
+                MyScoreNavigation(
+                    viewModel = viewModel,
+                    intentScore = intentScore.value,
+                    onIntentScoreClosed = { intentScore.value = null },
+                    onChooseFolder = folderPicker::launch,
+                    onImportPdf = { pdfPicker.launch(arrayOf("application/pdf")) },
+                )
             }
         }
     }
@@ -130,7 +60,7 @@ class MainActivity : ComponentActivity() {
         intentScore.value = scoreFromIntent(intent)
     }
 
-    private fun scoreFromIntent(intent: Intent?): dev.fanchao.myscore.data.ScoreDocument? {
+    private fun scoreFromIntent(intent: Intent?): ScoreDocument? {
         val uri = when {
             intent?.action == Intent.ACTION_VIEW && intent.type == "application/pdf" -> intent.data
             intent?.data?.scheme == "myscore" -> intent.data?.getQueryParameter("uri")?.let(Uri::parse)
@@ -145,32 +75,11 @@ class MainActivity : ComponentActivity() {
                     displayName to (if (cursor.isNull(1)) 0L else cursor.getLong(1))
                 } else null
             } ?: ((uri.lastPathSegment ?: "Shared score.pdf") to 0L)
-        return dev.fanchao.myscore.data.ScoreDocument(
+        return ScoreDocument(
             uri = uri.toString(),
             title = name.first.removeSuffix(".pdf").removeSuffix(".PDF"),
             sizeBytes = name.second,
             modifiedAtMillis = 0,
         )
-    }
-}
-
-@androidx.compose.runtime.Composable
-private fun ObserveLibraryChanges(uri: Uri?, onChanged: () -> Unit) {
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
-    val context = androidx.compose.ui.platform.LocalContext.current
-    DisposableEffect(uri, lifecycleOwner) {
-        if (uri == null) return@DisposableEffect onDispose { }
-        val observer = object : ContentObserver(Handler(Looper.getMainLooper())) {
-            override fun onChange(selfChange: Boolean) = onChanged()
-        }
-        context.contentResolver.registerContentObserver(uri, true, observer)
-        val lifecycleObserver = androidx.lifecycle.LifecycleEventObserver { _, event ->
-            if (event == androidx.lifecycle.Lifecycle.Event.ON_RESUME) onChanged()
-        }
-        lifecycleOwner.lifecycle.addObserver(lifecycleObserver)
-        onDispose {
-            context.contentResolver.unregisterContentObserver(observer)
-            lifecycleOwner.lifecycle.removeObserver(lifecycleObserver)
-        }
     }
 }
