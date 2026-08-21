@@ -32,34 +32,21 @@ class PdfViewerTest {
     }
 
     @Test
-    fun pagerIsDisabledWhenCurrentSinglePageIsZoomed() {
+    fun pagerIsDisabledWhenCurrentPaneIsZoomed() {
         assertFalse(
             isPagerScrollEnabled(
                 currentPane = 2,
-                pagesPerPane = 1,
-                zoomedPageIndices = setOf(2),
+                zoomedPaneIndices = setOf(2),
             ),
         )
     }
 
     @Test
-    fun pagerIsDisabledWhenEitherPageInCurrentTwoPagePaneIsZoomed() {
-        assertFalse(
-            isPagerScrollEnabled(
-                currentPane = 1,
-                pagesPerPane = 2,
-                zoomedPageIndices = setOf(3),
-            ),
-        )
-    }
-
-    @Test
-    fun zoomOnPrefetchedPageDoesNotDisableCurrentPane() {
+    fun zoomOnPrefetchedPaneDoesNotDisableCurrentPane() {
         assertTrue(
             isPagerScrollEnabled(
                 currentPane = 1,
-                pagesPerPane = 2,
-                zoomedPageIndices = setOf(4),
+                zoomedPaneIndices = setOf(2),
             ),
         )
     }
@@ -69,8 +56,7 @@ class PdfViewerTest {
         assertTrue(
             isPagerScrollEnabled(
                 currentPane = 2,
-                pagesPerPane = 1,
-                zoomedPageIndices = emptySet(),
+                zoomedPaneIndices = emptySet(),
             ),
         )
     }
