@@ -381,6 +381,7 @@ private fun PageScrubber(
     if (pageCount <= 0) return
     val paneCount = ceil(pageCount / pagesPerPane.toDouble()).toInt()
     var scrubbedPane by remember { mutableStateOf<Int?>(null) }
+    var scrubberPressed by remember { mutableStateOf(false) }
     val selectedPane = scrubbedPane ?: currentPane.coerceIn(0, paneCount - 1)
     val selectedPages = scrubberPageRange(selectedPane, pagesPerPane, pageCount)
     val firstSelectedPage = selectedPages.first
@@ -404,7 +405,7 @@ private fun PageScrubber(
                     .align(Alignment.BottomCenter)
                     .padding(bottom = 72.dp),
                 shape = RoundedCornerShape(12.dp),
-                color = ViewerAppBarColor,
+                color = ViewerScrubberActiveColor,
                 contentColor = ComposeColor.White,
                 shadowElevation = 8.dp,
             ) {
@@ -443,7 +444,11 @@ private fun PageScrubber(
                 .fillMaxWidth()
                 .padding(horizontal = 16.dp, vertical = 12.dp),
             shape = RoundedCornerShape(16.dp),
-            color = ViewerAppBarColor,
+            color = if (scrubberPressed) {
+                ViewerScrubberActiveColor
+            } else {
+                ViewerScrubberIdleColor
+            },
             contentColor = ComposeColor.White,
             shadowElevation = 4.dp,
         ) {
@@ -466,6 +471,7 @@ private fun PageScrubber(
                     .pointerInput(pageCount, pagesPerPane) {
                         awaitEachGesture {
                             val down = awaitFirstDown()
+                            scrubberPressed = true
                             var targetPane = paneForScrubberPosition(
                                 position = down.position.x,
                                 width = size.width.toFloat(),
@@ -473,26 +479,38 @@ private fun PageScrubber(
                                 pagesPerPane = pagesPerPane,
                                 horizontalInset = 12.dp.toPx(),
                             )
-                            scrubbedPane = targetPane
                             down.consume()
+                            var dragging = false
                             var released = false
-                            do {
-                                val event = awaitPointerEvent()
-                                val change = event.changes.firstOrNull { it.id == down.id }
-                                    ?: break
-                                targetPane = paneForScrubberPosition(
-                                    position = change.position.x,
-                                    width = size.width.toFloat(),
-                                    pageCount = pageCount,
-                                    pagesPerPane = pagesPerPane,
-                                    horizontalInset = 12.dp.toPx(),
-                                )
-                                scrubbedPane = targetPane
-                                change.consume()
-                                if (!change.pressed) released = true
-                            } while (!released)
-
-                            scrubbedPane = null
+                            try {
+                                do {
+                                    val event = awaitPointerEvent()
+                                    val change = event.changes.firstOrNull { it.id == down.id }
+                                        ?: break
+                                    targetPane = paneForScrubberPosition(
+                                        position = change.position.x,
+                                        width = size.width.toFloat(),
+                                        pageCount = pageCount,
+                                        pagesPerPane = pagesPerPane,
+                                        horizontalInset = 12.dp.toPx(),
+                                    )
+                                    if (
+                                        !dragging && isScrubberDrag(
+                                            startPosition = down.position.x,
+                                            currentPosition = change.position.x,
+                                            touchSlop = viewConfiguration.touchSlop,
+                                        )
+                                    ) {
+                                        dragging = true
+                                    }
+                                    if (dragging) scrubbedPane = targetPane
+                                    change.consume()
+                                    if (!change.pressed) released = true
+                                } while (!released)
+                            } finally {
+                                scrubberPressed = false
+                                scrubbedPane = null
+                            }
                             if (released) onPaneSelected(targetPane)
                         }
                     },
@@ -631,6 +649,12 @@ internal fun paneForScrubberPosition(
     pageCount = pageCount,
     horizontalInset = horizontalInset,
 ) / pagesPerPane
+
+internal fun isScrubberDrag(
+    startPosition: Float,
+    currentPosition: Float,
+    touchSlop: Float,
+): Boolean = abs(currentPosition - startPosition) >= touchSlop
 
 internal fun scrubberPageRange(
     paneIndex: Int,
@@ -928,6 +952,8 @@ private fun PdfPage(
 
 private const val ZoomFlingMinimumVelocity = 80f
 private val ViewerAppBarColor = ComposeColor.Black.copy(alpha = 0.58f)
+private val ViewerScrubberIdleColor = ComposeColor.Black.copy(alpha = 0.34f)
+private val ViewerScrubberActiveColor = ComposeColor.Black.copy(alpha = 0.76f)
 
 internal fun isPagerScrollEnabled(
     currentPane: Int,

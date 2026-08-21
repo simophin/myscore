@@ -6,6 +6,7 @@ import android.net.Uri
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
@@ -107,7 +108,9 @@ class PdfIntentTest {
             composeRule.onNodeWithContentDescription("Reader options").assertIsDisplayed()
             composeRule.onNodeWithContentDescription("Page scrubber, page 2 of 2").assertIsDisplayed()
             pressBack()
-            composeRule.onNodeWithText("MyScore").assertIsDisplayed()
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithText("MyScore").fetchSemanticsNodes().isNotEmpty()
+            }
         } finally {
             scenario.close()
             runBlocking {

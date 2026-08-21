@@ -203,4 +203,26 @@ class PdfViewerTest {
     fun finalOddPageFormsASinglePagePane() {
         assertEquals(4..4, scrubberPageRange(paneIndex = 2, pagesPerPane = 2, pageCount = 5))
     }
+
+    @Test
+    fun scrubberTapDoesNotCrossTheDragThreshold() {
+        assertFalse(
+            isScrubberDrag(
+                startPosition = 100f,
+                currentPosition = 107f,
+                touchSlop = 8f,
+            ),
+        )
+    }
+
+    @Test
+    fun scrubberPreviewStartsAtTheDragThreshold() {
+        assertTrue(
+            isScrubberDrag(
+                startPosition = 100f,
+                currentPosition = 108f,
+                touchSlop = 8f,
+            ),
+        )
+    }
 }
