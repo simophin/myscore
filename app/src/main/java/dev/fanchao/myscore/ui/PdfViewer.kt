@@ -11,6 +11,7 @@ import android.net.Uri
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.Image
+import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.gestures.awaitEachGesture
@@ -20,12 +21,18 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.pager.HorizontalPager
 import androidx.compose.foundation.pager.rememberPagerState
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.filled.ArrowBack
 import androidx.compose.material.icons.filled.Check
@@ -37,6 +44,7 @@ import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
+import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -58,6 +66,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
+import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.asImageBitmap
@@ -74,6 +85,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.IntSize
 import androidx.compose.ui.semantics.contentDescription
+import androidx.compose.ui.semantics.ProgressBarRangeInfo
+import androidx.compose.ui.semantics.progressBarRangeInfo
+import androidx.compose.ui.semantics.setProgress
 import androidx.compose.ui.semantics.semantics
 import dev.fanchao.myscore.R
 import dev.fanchao.myscore.data.ScoreDocument
@@ -84,6 +98,8 @@ import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
 import kotlin.math.ceil
 import kotlin.math.abs
+import kotlin.math.floor
+import kotlin.math.roundToInt
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
@@ -161,6 +177,7 @@ fun PdfViewer(
                             var zoomedPageIndices by remember(effectivePagesPerPane) {
                                 mutableStateOf(emptySet<Int>())
                             }
+                            val scope = rememberCoroutineScope()
                             LaunchedEffect(pagerState, effectivePagesPerPane) {
                                 snapshotFlow { pagerState.settledPage }
                                     .distinctUntilChanged()
@@ -169,44 +186,25 @@ fun PdfViewer(
                                         onPageChanged(anchorPage)
                                     }
                             }
-                            HorizontalPager(
-                                state = pagerState,
-                                modifier = Modifier
-                                    .fillMaxSize()
-                                    .background(documentBackgroundColor),
-                                beyondViewportPageCount = 1,
-                                pageSpacing = 8.dp,
-                                userScrollEnabled = isPagerScrollEnabled(
-                                    currentPane = pagerState.currentPage,
-                                    pagesPerPane = effectivePagesPerPane,
-                                    zoomedPageIndices = zoomedPageIndices,
-                                ),
-                            ) { paneIndex ->
-                                val firstPage = paneIndex * effectivePagesPerPane
-                                androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
-                                    PdfPage(
-                                        renderer = pdf.renderer,
-                                        pageIndex = firstPage,
-                                        paperModeEnabled = paperModeEnabled,
-                                        modifier = Modifier.weight(1f),
-                                        onTap = {
-                                            readerOptionsExpanded = false
-                                            appBarVisible = !appBarVisible
-                                        },
-                                        onZoomChanged = { zoomed ->
-                                            zoomedPageIndices = zoomedPageIndices.withZoomState(
-                                                firstPage,
-                                                zoomed,
-                                            )
-                                        },
-                                    )
-                                    if (
-                                        effectivePagesPerPane == 2 &&
-                                        firstPage + 1 < pdf.renderer.pageCount
-                                    ) {
+                            Box(Modifier.fillMaxSize()) {
+                                HorizontalPager(
+                                    state = pagerState,
+                                    modifier = Modifier
+                                        .fillMaxSize()
+                                        .background(documentBackgroundColor),
+                                    beyondViewportPageCount = 1,
+                                    pageSpacing = 8.dp,
+                                    userScrollEnabled = isPagerScrollEnabled(
+                                        currentPane = pagerState.currentPage,
+                                        pagesPerPane = effectivePagesPerPane,
+                                        zoomedPageIndices = zoomedPageIndices,
+                                    ),
+                                ) { paneIndex ->
+                                    val firstPage = paneIndex * effectivePagesPerPane
+                                    androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
                                         PdfPage(
                                             renderer = pdf.renderer,
-                                            pageIndex = firstPage + 1,
+                                            pageIndex = firstPage,
                                             paperModeEnabled = paperModeEnabled,
                                             modifier = Modifier.weight(1f),
                                             onTap = {
@@ -215,12 +213,48 @@ fun PdfViewer(
                                             },
                                             onZoomChanged = { zoomed ->
                                                 zoomedPageIndices = zoomedPageIndices.withZoomState(
-                                                    firstPage + 1,
+                                                    firstPage,
                                                     zoomed,
                                                 )
                                             },
                                         )
+                                        if (
+                                            effectivePagesPerPane == 2 &&
+                                            firstPage + 1 < pdf.renderer.pageCount
+                                        ) {
+                                            PdfPage(
+                                                renderer = pdf.renderer,
+                                                pageIndex = firstPage + 1,
+                                                paperModeEnabled = paperModeEnabled,
+                                                modifier = Modifier.weight(1f),
+                                                onTap = {
+                                                    readerOptionsExpanded = false
+                                                    appBarVisible = !appBarVisible
+                                                },
+                                                onZoomChanged = { zoomed ->
+                                                    zoomedPageIndices = zoomedPageIndices.withZoomState(
+                                                        firstPage + 1,
+                                                        zoomed,
+                                                    )
+                                                },
+                                            )
+                                        }
                                     }
+                                }
+                                if (appBarVisible) {
+                                    PageScrubber(
+                                        renderer = pdf.renderer,
+                                        pageCount = pdf.renderer.pageCount,
+                                        currentPane = pagerState.currentPage,
+                                        pagesPerPane = effectivePagesPerPane,
+                                        paperModeEnabled = paperModeEnabled,
+                                        modifier = Modifier.align(Alignment.BottomCenter),
+                                        onPaneSelected = { paneIndex ->
+                                            scope.launch {
+                                                pagerState.animateScrollToPage(paneIndex)
+                                            }
+                                        },
+                                    )
                                 }
                             }
                         }
@@ -334,6 +368,343 @@ fun PdfViewer(
             )
         }
     }
+}
+
+@Composable
+private fun PageScrubber(
+    renderer: PdfRenderer,
+    pageCount: Int,
+    currentPane: Int,
+    pagesPerPane: Int,
+    paperModeEnabled: Boolean,
+    onPaneSelected: (Int) -> Unit,
+    modifier: Modifier = Modifier,
+) {
+    if (pageCount <= 0) return
+    val paneCount = ceil(pageCount / pagesPerPane.toDouble()).toInt()
+    var scrubbedPane by remember { mutableStateOf<Int?>(null) }
+    var scrubberPressed by remember { mutableStateOf(false) }
+    val selectedPane = scrubbedPane ?: currentPane.coerceIn(0, paneCount - 1)
+    val selectedPages = scrubberPageRange(selectedPane, pagesPerPane, pageCount)
+    val firstSelectedPage = selectedPages.first
+    val lastSelectedPage = selectedPages.last
+    val pageRangeDescription = if (firstSelectedPage == lastSelectedPage) {
+        "page ${firstSelectedPage + 1} of $pageCount"
+    } else {
+        "pages ${firstSelectedPage + 1}–${lastSelectedPage + 1} of $pageCount"
+    }
+
+    Box(
+        modifier = modifier
+            .fillMaxWidth()
+            .navigationBarsPadding(),
+        contentAlignment = Alignment.BottomCenter,
+    ) {
+        scrubbedPane?.let { paneIndex ->
+            val previewPages = scrubberPageRange(paneIndex, pagesPerPane, pageCount)
+            Surface(
+                modifier = Modifier
+                    .align(Alignment.BottomCenter)
+                    .padding(bottom = 60.dp),
+                shape = RoundedCornerShape(12.dp),
+                color = ViewerScrubberActiveColor,
+                contentColor = ComposeColor.White,
+                shadowElevation = 8.dp,
+            ) {
+                Column(
+                    modifier = Modifier.padding(8.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .width(if (previewPages.count() == 1) 150.dp else 260.dp)
+                            .height(190.dp)
+                            .background(paperModeBackgroundColor(paperModeEnabled)),
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        PdfPaneThumbnail(
+                            renderer = renderer,
+                            pages = previewPages,
+                            paperModeEnabled = paperModeEnabled,
+                        )
+                    }
+                    Text(
+                        text = if (previewPages.first == previewPages.last) {
+                            "Page ${previewPages.first + 1} of $pageCount"
+                        } else {
+                            "Pages ${previewPages.first + 1}–${previewPages.last + 1} of $pageCount"
+                        },
+                        modifier = Modifier.padding(top = 6.dp),
+                        style = MaterialTheme.typography.labelLarge,
+                    )
+                }
+            }
+        }
+
+        Canvas(
+            modifier = Modifier
+                .fillMaxWidth()
+                .padding(horizontal = 24.dp, vertical = 6.dp)
+                .height(48.dp)
+                .semantics {
+                    contentDescription = "Page scrubber, $pageRangeDescription"
+                    progressBarRangeInfo = ProgressBarRangeInfo(
+                        current = selectedPane.toFloat(),
+                        range = 0f..(paneCount - 1).toFloat(),
+                        steps = (paneCount - 2).coerceAtLeast(0),
+                    )
+                    setProgress { value ->
+                        onPaneSelected(value.roundToInt().coerceIn(0, paneCount - 1))
+                        true
+                    }
+                }
+                .pointerInput(pageCount, pagesPerPane) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        scrubberPressed = true
+                        var targetPane = paneForScrubberPosition(
+                            position = down.position.x,
+                            width = size.width.toFloat(),
+                            pageCount = pageCount,
+                            pagesPerPane = pagesPerPane,
+                            horizontalInset = 12.dp.toPx(),
+                        )
+                        down.consume()
+                        var dragging = false
+                        var released = false
+                        try {
+                            do {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id }
+                                    ?: break
+                                targetPane = paneForScrubberPosition(
+                                    position = change.position.x,
+                                    width = size.width.toFloat(),
+                                    pageCount = pageCount,
+                                    pagesPerPane = pagesPerPane,
+                                    horizontalInset = 12.dp.toPx(),
+                                )
+                                if (
+                                    !dragging && isScrubberDrag(
+                                        startPosition = down.position.x,
+                                        currentPosition = change.position.x,
+                                        touchSlop = viewConfiguration.touchSlop,
+                                    )
+                                ) {
+                                    dragging = true
+                                }
+                                if (dragging) scrubbedPane = targetPane
+                                change.consume()
+                                if (!change.pressed) released = true
+                            } while (!released)
+                        } finally {
+                            scrubberPressed = false
+                            scrubbedPane = null
+                        }
+                        if (released) onPaneSelected(targetPane)
+                    }
+                },
+        ) {
+            val horizontalInset = 12.dp.toPx()
+            val startX = horizontalInset
+            val endX = (size.width - horizontalInset).coerceAtLeast(startX)
+            val centerY = size.height / 2f
+            val backgroundColor = ComposeColor.Black.copy(
+                alpha = if (scrubberPressed) 0.52f else 0.18f,
+            )
+            val trackColor = ComposeColor.White.copy(
+                alpha = if (scrubberPressed) 0.66f else 0.42f,
+            )
+            val markerColor = ComposeColor.White.copy(
+                alpha = if (scrubberPressed) 0.80f else 0.60f,
+            )
+            val selectedColor = ComposeColor.White.copy(
+                alpha = if (scrubberPressed) 1f else 0.92f,
+            )
+            val backgroundInset = 6.dp.toPx()
+            drawRoundRect(
+                color = backgroundColor,
+                topLeft = Offset(0f, backgroundInset),
+                size = Size(size.width, size.height - backgroundInset * 2f),
+                cornerRadius = CornerRadius(6.dp.toPx()),
+            )
+            drawLine(
+                color = trackColor,
+                start = Offset(startX, centerY),
+                end = Offset(endX, centerY),
+                strokeWidth = 2.dp.toPx(),
+            )
+            val markerCount = pageScrubberMarkerCount(
+                pageCount = pageCount,
+                availableWidth = endX - startX,
+                minimumSpacing = 10.dp.toPx(),
+            )
+            repeat(markerCount) { markerIndex ->
+                val fraction = if (markerCount == 1) {
+                    0.5f
+                } else {
+                    markerIndex / (markerCount - 1f)
+                }
+                drawCircle(
+                    color = markerColor,
+                    radius = 2.dp.toPx(),
+                    center = Offset(startX + (endX - startX) * fraction, centerY),
+                )
+            }
+            val firstSelectedX = pagePositionOnScrubber(
+                pageIndex = firstSelectedPage,
+                pageCount = pageCount,
+                startX = startX,
+                endX = endX,
+            )
+            val lastSelectedX = pagePositionOnScrubber(
+                pageIndex = lastSelectedPage,
+                pageCount = pageCount,
+                startX = startX,
+                endX = endX,
+            )
+            if (firstSelectedPage != lastSelectedPage) {
+                drawLine(
+                    color = selectedColor,
+                    start = Offset(firstSelectedX, centerY),
+                    end = Offset(lastSelectedX, centerY),
+                    strokeWidth = 6.dp.toPx(),
+                )
+            }
+            listOf(firstSelectedX, lastSelectedX).distinct().forEach { selectedX ->
+                drawCircle(
+                    color = selectedColor,
+                    radius = 6.dp.toPx(),
+                    center = Offset(selectedX, centerY),
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun PdfPaneThumbnail(
+    renderer: PdfRenderer,
+    pages: IntRange,
+    paperModeEnabled: Boolean,
+) {
+    androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
+        pages.forEach { pageIndex ->
+            PdfPageThumbnail(
+                renderer = renderer,
+                pageIndex = pageIndex,
+                paperModeEnabled = paperModeEnabled,
+                modifier = Modifier.weight(1f),
+            )
+        }
+    }
+}
+
+@Composable
+private fun PdfPageThumbnail(
+    renderer: PdfRenderer,
+    pageIndex: Int,
+    paperModeEnabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val bitmap by produceState<Bitmap?>(null, renderer, pageIndex, paperModeEnabled) {
+        val rendered = withContext(Dispatchers.IO) {
+            synchronized(renderer) {
+                renderer.openPage(pageIndex).use { page ->
+                    val width = 320
+                    val height = (page.height * (width.toFloat() / page.width))
+                        .roundToInt()
+                        .coerceAtLeast(1)
+                    createBitmap(width, height, Bitmap.Config.ARGB_8888).also { output ->
+                        output.eraseColor(if (paperModeEnabled) PAPER_COLOR else Color.WHITE)
+                        page.render(output, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        if (paperModeEnabled) applyPaperMode(output)
+                    }
+                }
+            }
+        }
+        value = rendered
+    }
+    val rendered = bitmap
+    DisposableEffect(rendered) {
+        onDispose { rendered?.recycle() }
+    }
+    if (rendered == null) {
+        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 2.dp)
+        }
+    } else {
+        Image(
+            bitmap = rendered.asImageBitmap(),
+            contentDescription = "Preview of page ${pageIndex + 1}",
+            modifier = modifier
+                .fillMaxSize()
+                .padding(6.dp),
+            contentScale = ContentScale.Fit,
+        )
+    }
+}
+
+internal fun paneForScrubberPosition(
+    position: Float,
+    width: Float,
+    pageCount: Int,
+    pagesPerPane: Int,
+    horizontalInset: Float = 0f,
+): Int = pageForScrubberPosition(
+    position = position,
+    width = width,
+    pageCount = pageCount,
+    horizontalInset = horizontalInset,
+) / pagesPerPane
+
+internal fun isScrubberDrag(
+    startPosition: Float,
+    currentPosition: Float,
+    touchSlop: Float,
+): Boolean = abs(currentPosition - startPosition) >= touchSlop
+
+internal fun scrubberPageRange(
+    paneIndex: Int,
+    pagesPerPane: Int,
+    pageCount: Int,
+): IntRange {
+    val firstPage = (paneIndex * pagesPerPane).coerceIn(0, pageCount - 1)
+    val lastPage = (firstPage + pagesPerPane - 1).coerceAtMost(pageCount - 1)
+    return firstPage..lastPage
+}
+
+private fun pagePositionOnScrubber(
+    pageIndex: Int,
+    pageCount: Int,
+    startX: Float,
+    endX: Float,
+): Float {
+    val fraction = if (pageCount == 1) 0.5f else pageIndex / (pageCount - 1f)
+    return startX + (endX - startX) * fraction
+}
+
+internal fun pageForScrubberPosition(
+    position: Float,
+    width: Float,
+    pageCount: Int,
+    horizontalInset: Float = 0f,
+): Int {
+    val trackWidth = width - horizontalInset * 2f
+    if (pageCount <= 1 || trackWidth <= 0f) return 0
+    val fraction = ((position - horizontalInset) / trackWidth).coerceIn(0f, 1f)
+    return (fraction * (pageCount - 1)).roundToInt()
+}
+
+internal fun pageScrubberMarkerCount(
+    pageCount: Int,
+    availableWidth: Float,
+    minimumSpacing: Float,
+): Int {
+    if (pageCount <= 0 || availableWidth <= 0f) return 0
+    if (pageCount == 1 || minimumSpacing <= 0f) return pageCount
+    val maximumMarkers = floor(availableWidth / minimumSpacing).toInt() + 1
+    return pageCount.coerceAtMost(maximumMarkers.coerceAtLeast(2))
 }
 
 @Composable
@@ -589,6 +960,7 @@ private fun PdfPage(
 
 private const val ZoomFlingMinimumVelocity = 80f
 private val ViewerAppBarColor = ComposeColor.Black.copy(alpha = 0.58f)
+private val ViewerScrubberActiveColor = ComposeColor.Black.copy(alpha = 0.76f)
 
 internal fun isPagerScrollEnabled(
     currentPane: Int,
