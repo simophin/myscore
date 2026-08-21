@@ -10,6 +10,7 @@ import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
 import androidx.compose.ui.test.performTouchInput
 import androidx.compose.ui.test.doubleClick
+import androidx.compose.ui.test.click
 import androidx.compose.ui.test.swipeLeft
 import androidx.test.core.app.ActivityScenario
 import androidx.test.core.app.ApplicationProvider
@@ -53,22 +54,26 @@ class PdfIntentTest {
         val scenario = ActivityScenario.launch<MainActivity>(intent)
         try {
             composeRule.onNodeWithText("External Score").assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Reader options").performClick()
             composeRule.onNodeWithText("2 pages").assertIsDisplayed()
-            composeRule.onNodeWithContentDescription("Page layout: Auto").performClick()
-            composeRule.onNodeWithText("Single page").performClick()
-            composeRule.onNodeWithContentDescription("Page layout: Single page").assertIsDisplayed()
+            composeRule.onNodeWithText("Layout: Single page").performClick()
+            composeRule.onNodeWithContentDescription("Reader options").performClick()
+            composeRule.onNodeWithText("Layout: Single page").assertIsDisplayed()
+            pressBack()
             scenario.recreate()
-            composeRule.onNodeWithContentDescription("Page layout: Single page").assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Reader options").performClick()
+            composeRule.onNodeWithText("Layout: Single page").assertIsDisplayed()
+            pressBack()
             composeRule.onNodeWithContentDescription("Page 1").performTouchInput { doubleClick() }
             composeRule.onNodeWithContentDescription("Page 1").performTouchInput { swipeLeft() }
             composeRule.onNodeWithContentDescription("Page 1").assertIsDisplayed()
             composeRule.onNodeWithContentDescription("Page 1").performTouchInput { doubleClick() }
             composeRule.onNodeWithContentDescription("Page 1").performTouchInput { swipeLeft() }
             composeRule.onNodeWithContentDescription("Page 2").assertIsDisplayed()
-            composeRule.onNodeWithContentDescription("Enter full screen").performClick()
-            composeRule.onNodeWithContentDescription("Exit full screen").assertIsDisplayed()
-            pressBack()
-            composeRule.onNodeWithText("External Score").assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Page 2").performTouchInput { click() }
+            composeRule.onNodeWithContentDescription("Reader options").assertDoesNotExist()
+            composeRule.onNodeWithContentDescription("Page 2").performTouchInput { click() }
+            composeRule.onNodeWithContentDescription("Reader options").assertIsDisplayed()
             pressBack()
             composeRule.onNodeWithText("MyScore").assertIsDisplayed()
         } finally {
