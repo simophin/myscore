@@ -39,8 +39,11 @@ class PdfIntentTest {
         val pdf = File(context.cacheDir, "External Score.pdf")
         val document = PdfDocument()
         try {
-            document.startPage(PdfDocument.PageInfo.Builder(600, 800, 1).create()).also(document::finishPage)
-            document.startPage(PdfDocument.PageInfo.Builder(600, 800, 2).create()).also(document::finishPage)
+            repeat(4) { pageIndex ->
+                document.startPage(
+                    PdfDocument.PageInfo.Builder(600, 800, pageIndex + 1).create(),
+                ).also(document::finishPage)
+            }
             FileOutputStream(pdf).use(document::writeTo)
         } finally {
             document.close()
@@ -58,22 +61,36 @@ class PdfIntentTest {
         val scenario = ActivityScenario.launch<MainActivity>(intent)
         try {
             composeRule.onNodeWithText("External Score").assertIsDisplayed()
-            composeRule.onNodeWithContentDescription("Page scrubber, page 1 of 2")
+            composeRule.onNodeWithContentDescription("Page scrubber, page 1 of 4")
                 .assertIsDisplayed()
                 .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
                     setProgress(1f)
                 }
             composeRule.onNodeWithContentDescription("Page 2").assertIsDisplayed()
-            composeRule.onNodeWithContentDescription("Page scrubber, page 2 of 2")
+            composeRule.onNodeWithContentDescription("Page scrubber, page 2 of 4")
                 .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
                     setProgress(0f)
                 }
             composeRule.onNodeWithContentDescription("Page 1").assertIsDisplayed()
             composeRule.onNodeWithContentDescription("Reader options").performClick()
-            composeRule.onNodeWithText("2 pages").assertIsDisplayed()
+            composeRule.onNodeWithText("4 pages").assertIsDisplayed()
             composeRule.onNodeWithText("Layout: Two pages").performClick()
-            composeRule.onNodeWithContentDescription("Page scrubber, pages 1–2 of 2")
+            composeRule.onNodeWithContentDescription("Page scrubber, pages 1–2 of 4")
                 .assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Page 1").performTouchInput { doubleClick() }
+            composeRule.onNodeWithContentDescription("Page 2").performTouchInput { swipeLeft() }
+            composeRule.onNodeWithContentDescription("Page scrubber, pages 1–2 of 4")
+                .assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Page 2").performTouchInput { doubleClick() }
+            composeRule.onNodeWithContentDescription("Page 2").performTouchInput { swipeLeft() }
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithContentDescription("Page scrubber, pages 3–4 of 4")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
+            composeRule.onNodeWithContentDescription("Page scrubber, pages 3–4 of 4")
+                .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
+                    setProgress(0f)
+                }
             composeRule.onNodeWithContentDescription("Reader options").performClick()
             composeRule.onNodeWithText("Layout: Single page").performClick()
             composeRule.onNodeWithContentDescription("Reader options").performClick()
@@ -90,7 +107,7 @@ class PdfIntentTest {
             composeRule.onNodeWithContentDescription("Page 1").performTouchInput { swipeLeft() }
             composeRule.onNodeWithContentDescription("Page 2").assertIsDisplayed()
             composeRule.waitUntil(timeoutMillis = 5_000) {
-                composeRule.onAllNodesWithContentDescription("Page scrubber, page 2 of 2")
+                composeRule.onAllNodesWithContentDescription("Page scrubber, page 2 of 4")
                     .fetchSemanticsNodes().isNotEmpty()
             }
             composeRule.onNodeWithContentDescription("Page 2").performTouchInput { click() }
@@ -99,14 +116,14 @@ class PdfIntentTest {
                     .fetchSemanticsNodes().isEmpty()
             }
             composeRule.onNodeWithContentDescription("Reader options").assertDoesNotExist()
-            composeRule.onNodeWithContentDescription("Page scrubber, page 2 of 2").assertDoesNotExist()
+            composeRule.onNodeWithContentDescription("Page scrubber, page 2 of 4").assertDoesNotExist()
             composeRule.onNodeWithContentDescription("Page 2").performTouchInput { click() }
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithContentDescription("Reader options")
                     .fetchSemanticsNodes().isNotEmpty()
             }
             composeRule.onNodeWithContentDescription("Reader options").assertIsDisplayed()
-            composeRule.onNodeWithContentDescription("Page scrubber, page 2 of 2").assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Page scrubber, page 2 of 4").assertIsDisplayed()
             pressBack()
             composeRule.waitUntil(timeoutMillis = 5_000) {
                 composeRule.onAllNodesWithText("MyScore").fetchSemanticsNodes().isNotEmpty()

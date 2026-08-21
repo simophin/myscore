@@ -174,7 +174,7 @@ fun PdfViewer(
                                     .coerceIn(0, (paneCount - 1).coerceAtLeast(0)),
                                 pageCount = { paneCount },
                             )
-                            var zoomedPageIndices by remember(effectivePagesPerPane) {
+                            var zoomedPaneIndices by remember(effectivePagesPerPane) {
                                 mutableStateOf(emptySet<Int>())
                             }
                             val scope = rememberCoroutineScope()
@@ -196,50 +196,27 @@ fun PdfViewer(
                                     pageSpacing = 8.dp,
                                     userScrollEnabled = isPagerScrollEnabled(
                                         currentPane = pagerState.currentPage,
-                                        pagesPerPane = effectivePagesPerPane,
-                                        zoomedPageIndices = zoomedPageIndices,
+                                        zoomedPaneIndices = zoomedPaneIndices,
                                     ),
                                 ) { paneIndex ->
                                     val firstPage = paneIndex * effectivePagesPerPane
-                                    androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
-                                        PdfPage(
-                                            renderer = pdf.renderer,
-                                            pageIndex = firstPage,
-                                            paperModeEnabled = paperModeEnabled,
-                                            modifier = Modifier.weight(1f),
-                                            onTap = {
-                                                readerOptionsExpanded = false
-                                                appBarVisible = !appBarVisible
-                                            },
-                                            onZoomChanged = { zoomed ->
-                                                zoomedPageIndices = zoomedPageIndices.withZoomState(
-                                                    firstPage,
-                                                    zoomed,
-                                                )
-                                            },
-                                        )
-                                        if (
-                                            effectivePagesPerPane == 2 &&
-                                            firstPage + 1 < pdf.renderer.pageCount
-                                        ) {
-                                            PdfPage(
-                                                renderer = pdf.renderer,
-                                                pageIndex = firstPage + 1,
-                                                paperModeEnabled = paperModeEnabled,
-                                                modifier = Modifier.weight(1f),
-                                                onTap = {
-                                                    readerOptionsExpanded = false
-                                                    appBarVisible = !appBarVisible
-                                                },
-                                                onZoomChanged = { zoomed ->
-                                                    zoomedPageIndices = zoomedPageIndices.withZoomState(
-                                                        firstPage + 1,
-                                                        zoomed,
-                                                    )
-                                                },
+                                    PdfPane(
+                                        renderer = pdf.renderer,
+                                        firstPage = firstPage,
+                                        pagesPerPane = effectivePagesPerPane,
+                                        pageCount = pdf.renderer.pageCount,
+                                        paperModeEnabled = paperModeEnabled,
+                                        onTap = {
+                                            readerOptionsExpanded = false
+                                            appBarVisible = !appBarVisible
+                                        },
+                                        onZoomChanged = { zoomed ->
+                                            zoomedPaneIndices = zoomedPaneIndices.withZoomState(
+                                                paneIndex,
+                                                zoomed,
                                             )
-                                        }
-                                    }
+                                        },
+                                    )
                                 }
                                 if (appBarVisible) {
                                     PageScrubber(
@@ -755,44 +732,28 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 }
 
 @Composable
-private fun PdfPage(
+private fun PdfPane(
     renderer: PdfRenderer,
-    pageIndex: Int,
+    firstPage: Int,
+    pagesPerPane: Int,
+    pageCount: Int,
     paperModeEnabled: Boolean,
     modifier: Modifier = Modifier,
     onTap: () -> Unit,
     onZoomChanged: (Boolean) -> Unit,
 ) {
-    val bitmap by produceState<Bitmap?>(initialValue = null, renderer, pageIndex, paperModeEnabled) {
-        value = withContext(Dispatchers.IO) {
-            synchronized(renderer) {
-                renderer.openPage(pageIndex).use { page ->
-                    val scale = (1600f / page.width).coerceAtMost(2f)
-                    val width = (page.width * scale).toInt().coerceAtLeast(1)
-                    val height = (page.height * scale).toInt().coerceAtLeast(1)
-                    createBitmap(width, height, Bitmap.Config.ARGB_8888).also { output ->
-                        output.eraseColor(if (paperModeEnabled) PAPER_COLOR else Color.WHITE)
-                        page.render(output, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                        if (paperModeEnabled) {
-                            applyPaperMode(output)
-                        }
-                    }
-                }
-            }
-        }
-    }
-    var scale by remember(pageIndex) { mutableFloatStateOf(1f) }
-    var offsetX by remember(pageIndex) { mutableFloatStateOf(0f) }
-    var offsetY by remember(pageIndex) { mutableFloatStateOf(0f) }
-    var viewportSize by remember(pageIndex) { mutableStateOf(IntSize.Zero) }
+    var scale by remember(firstPage, pagesPerPane) { mutableFloatStateOf(1f) }
+    var offsetX by remember(firstPage, pagesPerPane) { mutableFloatStateOf(0f) }
+    var offsetY by remember(firstPage, pagesPerPane) { mutableFloatStateOf(0f) }
+    var viewportSize by remember(firstPage, pagesPerPane) { mutableStateOf(IntSize.Zero) }
     val currentScale by rememberUpdatedState(scale)
     val currentOnTap by rememberUpdatedState(onTap)
     val currentOnZoomChanged by rememberUpdatedState(onZoomChanged)
     val scope = rememberCoroutineScope()
-    val offsetXAnimation = remember(pageIndex) { Animatable(0f) }
-    val offsetYAnimation = remember(pageIndex) { Animatable(0f) }
+    val offsetXAnimation = remember(firstPage, pagesPerPane) { Animatable(0f) }
+    val offsetYAnimation = remember(firstPage, pagesPerPane) { Animatable(0f) }
     val flingDecay = remember { exponentialDecay<Float>() }
-    DisposableEffect(pageIndex) {
+    DisposableEffect(firstPage, pagesPerPane) {
         onDispose { currentOnZoomChanged(false) }
     }
     val transformState = rememberTransformableState { centroid, zoomChange, panChange, _ ->
@@ -826,134 +787,181 @@ private fun PdfPage(
         scale = newScale
         currentOnZoomChanged(newScale > 1f)
     }
-    Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
-        val rendered = bitmap
-        if (rendered == null) {
-            CircularProgressIndicator()
-        } else {
-            Image(
-                bitmap = rendered.asImageBitmap(),
-                contentDescription = "Page ${pageIndex + 1}",
-                modifier = Modifier
-                    .fillMaxSize()
-                    .onSizeChanged { viewportSize = it }
-                    .padding(vertical = 8.dp)
-                    .graphicsLayer(
-                        scaleX = scale,
-                        scaleY = scale,
-                        translationX = offsetX,
-                        translationY = offsetY,
-                    )
-                    .pointerInput(pageIndex) {
-                        detectTapGestures(
-                            onTap = { currentOnTap() },
-                            onDoubleTap = { tap ->
-                                if (currentScale > 1f) {
-                                    scope.launch {
-                                        offsetXAnimation.stop()
-                                        offsetYAnimation.stop()
-                                        offsetXAnimation.snapTo(0f)
-                                        offsetYAnimation.snapTo(0f)
-                                    }
-                                    scale = 1f
-                                    offsetX = 0f
-                                    offsetY = 0f
-                                    currentOnZoomChanged(false)
-                                } else {
-                                    scale = 2.5f
-                                    offsetX = constrainZoomOffset(
-                                        offset = (size.width / 2f - tap.x) * 1.5f,
-                                        containerSize = size.width,
-                                        scale = scale,
-                                    )
-                                    offsetY = constrainZoomOffset(
-                                        offset = (size.height / 2f - tap.y) * 1.5f,
-                                        containerSize = size.height,
-                                        scale = scale,
-                                    )
-                                    currentOnZoomChanged(true)
-                                }
-                            },
-                        )
-                    }
-                    .pointerInput(pageIndex) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown(
-                                requireUnconsumed = false,
-                                pass = PointerEventPass.Initial,
-                            )
+    Box(
+        modifier = modifier
+            .fillMaxSize()
+            .onSizeChanged { viewportSize = it }
+            .graphicsLayer(
+                scaleX = scale,
+                scaleY = scale,
+                translationX = offsetX,
+                translationY = offsetY,
+            )
+            .pointerInput(firstPage, pagesPerPane) {
+                detectTapGestures(
+                    onTap = { currentOnTap() },
+                    onDoubleTap = { tap ->
+                        if (currentScale > 1f) {
                             scope.launch {
                                 offsetXAnimation.stop()
                                 offsetYAnimation.stop()
+                                offsetXAnimation.snapTo(0f)
+                                offsetYAnimation.snapTo(0f)
                             }
-                            if (currentScale <= 1f) return@awaitEachGesture
+                            scale = 1f
+                            offsetX = 0f
+                            offsetY = 0f
+                            currentOnZoomChanged(false)
+                        } else {
+                            scale = 2.5f
+                            offsetX = constrainZoomOffset(
+                                offset = (size.width / 2f - tap.x) * 1.5f,
+                                containerSize = size.width,
+                                scale = scale,
+                            )
+                            offsetY = constrainZoomOffset(
+                                offset = (size.height / 2f - tap.y) * 1.5f,
+                                containerSize = size.height,
+                                scale = scale,
+                            )
+                            currentOnZoomChanged(true)
+                        }
+                    },
+                )
+            }
+            .pointerInput(firstPage, pagesPerPane) {
+                awaitEachGesture {
+                    val down = awaitFirstDown(
+                        requireUnconsumed = false,
+                        pass = PointerEventPass.Initial,
+                    )
+                    scope.launch {
+                        offsetXAnimation.stop()
+                        offsetYAnimation.stop()
+                    }
+                    if (currentScale <= 1f) return@awaitEachGesture
 
-                            val velocityTracker = VelocityTracker()
-                            velocityTracker.addPosition(down.uptimeMillis, down.position)
-                            var activePointer = down.id
-                            var singlePointerPan = true
+                    val velocityTracker = VelocityTracker()
+                    velocityTracker.addPosition(down.uptimeMillis, down.position)
+                    var activePointer = down.id
+                    var singlePointerPan = true
 
-                            do {
-                                val event = awaitPointerEvent(PointerEventPass.Initial)
-                                val pressedChanges = event.changes.filter { it.pressed }
-                                if (pressedChanges.size > 1) singlePointerPan = false
-                                val activeChange = event.changes.firstOrNull { it.id == activePointer }
-                                    ?: pressedChanges.firstOrNull()?.also { activePointer = it.id }
+                    do {
+                        val event = awaitPointerEvent(PointerEventPass.Initial)
+                        val pressedChanges = event.changes.filter { it.pressed }
+                        if (pressedChanges.size > 1) singlePointerPan = false
+                        val activeChange = event.changes.firstOrNull { it.id == activePointer }
+                            ?: pressedChanges.firstOrNull()?.also { activePointer = it.id }
 
-                                if (
-                                    singlePointerPan &&
-                                    activeChange != null &&
-                                    activeChange.pressed &&
-                                    pressedChanges.size == 1
-                                ) {
-                                    velocityTracker.addPosition(
-                                        activeChange.uptimeMillis,
-                                        activeChange.position,
-                                    )
-                                }
-                            } while (event.changes.any { it.pressed })
+                        if (
+                            singlePointerPan &&
+                            activeChange != null &&
+                            activeChange.pressed &&
+                            pressedChanges.size == 1
+                        ) {
+                            velocityTracker.addPosition(
+                                activeChange.uptimeMillis,
+                                activeChange.position,
+                            )
+                        }
+                    } while (event.changes.any { it.pressed })
 
-                            if (!singlePointerPan || currentScale <= 1f) return@awaitEachGesture
+                    if (!singlePointerPan || currentScale <= 1f) return@awaitEachGesture
 
-                            val velocity = velocityTracker.calculateVelocity()
-                            if (
-                                abs(velocity.x) < ZoomFlingMinimumVelocity &&
-                                abs(velocity.y) < ZoomFlingMinimumVelocity
+                    val velocity = velocityTracker.calculateVelocity()
+                    if (
+                        abs(velocity.x) < ZoomFlingMinimumVelocity &&
+                        abs(velocity.y) < ZoomFlingMinimumVelocity
+                    ) {
+                        return@awaitEachGesture
+                    }
+                    scope.launch {
+                        val maxOffsetX = zoomOffsetLimit(viewportSize.width, scale)
+                        val maxOffsetY = zoomOffsetLimit(viewportSize.height, scale)
+                        offsetXAnimation.updateBounds(-maxOffsetX, maxOffsetX)
+                        offsetYAnimation.updateBounds(-maxOffsetY, maxOffsetY)
+                        offsetXAnimation.snapTo(offsetX)
+                        offsetYAnimation.snapTo(offsetY)
+                        launch {
+                            offsetXAnimation.animateDecay(
+                                zoomGestureDeltaToOffsetDelta(velocity.x, scale),
+                                flingDecay,
                             ) {
-                                return@awaitEachGesture
+                                offsetX = value
                             }
-                            scope.launch {
-                                val maxOffsetX = zoomOffsetLimit(viewportSize.width, scale)
-                                val maxOffsetY = zoomOffsetLimit(viewportSize.height, scale)
-                                offsetXAnimation.updateBounds(-maxOffsetX, maxOffsetX)
-                                offsetYAnimation.updateBounds(-maxOffsetY, maxOffsetY)
-                                offsetXAnimation.snapTo(offsetX)
-                                offsetYAnimation.snapTo(offsetY)
-                                launch {
-                                    offsetXAnimation.animateDecay(
-                                        zoomGestureDeltaToOffsetDelta(velocity.x, scale),
-                                        flingDecay,
-                                    ) {
-                                        offsetX = value
-                                    }
-                                }
-                                launch {
-                                    offsetYAnimation.animateDecay(
-                                        zoomGestureDeltaToOffsetDelta(velocity.y, scale),
-                                        flingDecay,
-                                    ) {
-                                        offsetY = value
-                                    }
-                                }
+                        }
+                        launch {
+                            offsetYAnimation.animateDecay(
+                                zoomGestureDeltaToOffsetDelta(velocity.y, scale),
+                                flingDecay,
+                            ) {
+                                offsetY = value
                             }
                         }
                     }
-                    .transformable(
-                        state = transformState,
-                        canPan = { scale > 1f },
-                    ),
-                contentScale = ContentScale.Fit,
-            )
+                }
+            }
+            .transformable(
+                state = transformState,
+                canPan = { scale > 1f },
+            ),
+        contentAlignment = Alignment.Center,
+    ) {
+        androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
+            repeat(pagesPerPane) { pageOffset ->
+                val pageIndex = firstPage + pageOffset
+                if (pageIndex < pageCount) {
+                    RenderedPdfPage(
+                        renderer = renderer,
+                        pageIndex = pageIndex,
+                        paperModeEnabled = paperModeEnabled,
+                        modifier = Modifier.weight(1f),
+                    )
+                }
+            }
+        }
+    }
+}
+
+@Composable
+private fun RenderedPdfPage(
+    renderer: PdfRenderer,
+    pageIndex: Int,
+    paperModeEnabled: Boolean,
+    modifier: Modifier = Modifier,
+) {
+    val bitmap by produceState<Bitmap?>(initialValue = null, renderer, pageIndex, paperModeEnabled) {
+        value = withContext(Dispatchers.IO) {
+            synchronized(renderer) {
+                renderer.openPage(pageIndex).use { page ->
+                    val renderScale = (1600f / page.width).coerceAtMost(2f)
+                    val width = (page.width * renderScale).toInt().coerceAtLeast(1)
+                    val height = (page.height * renderScale).toInt().coerceAtLeast(1)
+                    createBitmap(width, height, Bitmap.Config.ARGB_8888).also { output ->
+                        output.eraseColor(if (paperModeEnabled) PAPER_COLOR else Color.WHITE)
+                        page.render(output, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+                        if (paperModeEnabled) applyPaperMode(output)
+                    }
+                }
+            }
+        }
+    }
+    val rendered = bitmap
+    if (rendered == null) {
+        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator()
+        }
+    } else {
+        Image(
+            bitmap = rendered.asImageBitmap(),
+            contentDescription = "Page ${pageIndex + 1}",
+            modifier = modifier
+                .fillMaxSize()
+                .padding(vertical = 8.dp),
+            contentScale = ContentScale.Fit,
+        )
+        DisposableEffect(rendered) {
+            onDispose { rendered.recycle() }
         }
     }
 }
@@ -964,12 +972,8 @@ private val ViewerScrubberActiveColor = ComposeColor.Black.copy(alpha = 0.76f)
 
 internal fun isPagerScrollEnabled(
     currentPane: Int,
-    pagesPerPane: Int,
-    zoomedPageIndices: Set<Int>,
-): Boolean {
-    val firstPage = currentPane * pagesPerPane
-    return (firstPage until firstPage + pagesPerPane).none(zoomedPageIndices::contains)
-}
+    zoomedPaneIndices: Set<Int>,
+): Boolean = currentPane !in zoomedPaneIndices
 
 internal fun constrainZoomOffset(offset: Float, containerSize: Int, scale: Float): Float {
     if (scale <= 1f) return 0f
@@ -985,9 +989,9 @@ internal fun zoomGestureDeltaToOffsetDelta(delta: Float, scale: Float): Float {
     return if (scale <= 1f) delta else delta * scale
 }
 
-private fun Set<Int>.withZoomState(pageIndex: Int, zoomed: Boolean): Set<Int> = when {
-    zoomed && pageIndex !in this -> this + pageIndex
-    !zoomed && pageIndex in this -> this - pageIndex
+private fun Set<Int>.withZoomState(paneIndex: Int, zoomed: Boolean): Set<Int> = when {
+    zoomed && paneIndex !in this -> this + paneIndex
+    !zoomed && paneIndex in this -> this - paneIndex
     else -> this
 }
 
