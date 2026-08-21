@@ -66,7 +66,9 @@ import androidx.compose.runtime.snapshotFlow
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.geometry.CornerRadius
 import androidx.compose.ui.geometry.Offset
+import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.keepScreenOn
 import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.asImageBitmap
@@ -403,7 +405,7 @@ private fun PageScrubber(
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
-                    .padding(bottom = 72.dp),
+                    .padding(bottom = 60.dp),
                 shape = RoundedCornerShape(12.dp),
                 color = ViewerScrubberActiveColor,
                 contentColor = ComposeColor.White,
@@ -442,7 +444,7 @@ private fun PageScrubber(
         Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 24.dp, vertical = 12.dp)
+                .padding(horizontal = 24.dp, vertical = 6.dp)
                 .height(48.dp)
                 .semantics {
                     contentDescription = "Page scrubber, $pageRangeDescription"
@@ -519,7 +521,13 @@ private fun PageScrubber(
             val selectedColor = ComposeColor.White.copy(
                 alpha = if (scrubberPressed) 1f else 0.92f,
             )
-            drawRect(color = backgroundColor)
+            val backgroundInset = 6.dp.toPx()
+            drawRoundRect(
+                color = backgroundColor,
+                topLeft = Offset(0f, backgroundInset),
+                size = Size(size.width, size.height - backgroundInset * 2f),
+                cornerRadius = CornerRadius(6.dp.toPx()),
+            )
             drawLine(
                 color = trackColor,
                 start = Offset(startX, centerY),
