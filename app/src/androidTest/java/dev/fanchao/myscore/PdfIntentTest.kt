@@ -5,10 +5,13 @@ import android.graphics.pdf.PdfDocument
 import android.net.Uri
 import androidx.compose.ui.test.assertIsDisplayed
 import androidx.compose.ui.test.junit4.v2.createEmptyComposeRule
+import androidx.compose.ui.test.onAllNodesWithContentDescription
 import androidx.compose.ui.test.onNodeWithContentDescription
 import androidx.compose.ui.test.onNodeWithText
 import androidx.compose.ui.test.performClick
+import androidx.compose.ui.test.performSemanticsAction
 import androidx.compose.ui.test.performTouchInput
+import androidx.compose.ui.semantics.SemanticsActions
 import androidx.compose.ui.test.doubleClick
 import androidx.compose.ui.test.click
 import androidx.compose.ui.test.swipeLeft
@@ -54,6 +57,17 @@ class PdfIntentTest {
         val scenario = ActivityScenario.launch<MainActivity>(intent)
         try {
             composeRule.onNodeWithText("External Score").assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Page scrubber, page 1 of 2")
+                .assertIsDisplayed()
+                .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
+                    setProgress(1f)
+                }
+            composeRule.onNodeWithContentDescription("Page 2").assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Page scrubber, page 2 of 2")
+                .performSemanticsAction(SemanticsActions.SetProgress) { setProgress ->
+                    setProgress(0f)
+                }
+            composeRule.onNodeWithContentDescription("Page 1").assertIsDisplayed()
             composeRule.onNodeWithContentDescription("Reader options").performClick()
             composeRule.onNodeWithText("2 pages").assertIsDisplayed()
             composeRule.onNodeWithText("Layout: Single page").performClick()
@@ -70,10 +84,24 @@ class PdfIntentTest {
             composeRule.onNodeWithContentDescription("Page 1").performTouchInput { doubleClick() }
             composeRule.onNodeWithContentDescription("Page 1").performTouchInput { swipeLeft() }
             composeRule.onNodeWithContentDescription("Page 2").assertIsDisplayed()
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithContentDescription("Page scrubber, page 2 of 2")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
             composeRule.onNodeWithContentDescription("Page 2").performTouchInput { click() }
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithContentDescription("Reader options")
+                    .fetchSemanticsNodes().isEmpty()
+            }
             composeRule.onNodeWithContentDescription("Reader options").assertDoesNotExist()
+            composeRule.onNodeWithContentDescription("Page scrubber, page 2 of 2").assertDoesNotExist()
             composeRule.onNodeWithContentDescription("Page 2").performTouchInput { click() }
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithContentDescription("Reader options")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
             composeRule.onNodeWithContentDescription("Reader options").assertIsDisplayed()
+            composeRule.onNodeWithContentDescription("Page scrubber, page 2 of 2").assertIsDisplayed()
             pressBack()
             composeRule.onNodeWithText("MyScore").assertIsDisplayed()
         } finally {

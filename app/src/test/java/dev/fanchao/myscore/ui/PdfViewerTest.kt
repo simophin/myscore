@@ -110,4 +110,64 @@ class PdfViewerTest {
             zoomGestureDeltaToOffsetDelta(delta = 10f, scale = 1f),
         )
     }
+
+    @Test
+    fun scrubberPositionMapsAcrossTheWholeDocument() {
+        assertEquals(0, pageForScrubberPosition(position = 0f, width = 400f, pageCount = 101))
+        assertEquals(50, pageForScrubberPosition(position = 200f, width = 400f, pageCount = 101))
+        assertEquals(100, pageForScrubberPosition(position = 400f, width = 400f, pageCount = 101))
+    }
+
+    @Test
+    fun scrubberPositionIsClampedToTheDocument() {
+        assertEquals(0, pageForScrubberPosition(position = -40f, width = 400f, pageCount = 12))
+        assertEquals(11, pageForScrubberPosition(position = 600f, width = 400f, pageCount = 12))
+        assertEquals(0, pageForScrubberPosition(position = 200f, width = 0f, pageCount = 12))
+    }
+
+    @Test
+    fun scrubberPositionUsesTheVisibleTrackInsets() {
+        assertEquals(
+            0,
+            pageForScrubberPosition(
+                position = 12f,
+                width = 424f,
+                pageCount = 101,
+                horizontalInset = 12f,
+            ),
+        )
+        assertEquals(
+            100,
+            pageForScrubberPosition(
+                position = 412f,
+                width = 424f,
+                pageCount = 101,
+                horizontalInset = 12f,
+            ),
+        )
+    }
+
+    @Test
+    fun shortDocumentsShowOneMarkerPerPage() {
+        assertEquals(
+            8,
+            pageScrubberMarkerCount(
+                pageCount = 8,
+                availableWidth = 400f,
+                minimumSpacing = 10f,
+            ),
+        )
+    }
+
+    @Test
+    fun longDocumentsRespectMinimumMarkerSpacing() {
+        assertEquals(
+            41,
+            pageScrubberMarkerCount(
+                pageCount = 500,
+                availableWidth = 400f,
+                minimumSpacing = 10f,
+            ),
+        )
+    }
 }
