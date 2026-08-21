@@ -170,4 +170,37 @@ class PdfViewerTest {
             ),
         )
     }
+
+    @Test
+    fun twoPageScrubberMapsBothPagesToTheirContainingPane() {
+        assertEquals(
+            0,
+            paneForScrubberPosition(
+                position = 80f,
+                width = 500f,
+                pageCount = 6,
+                pagesPerPane = 2,
+            ),
+        )
+        assertEquals(
+            1,
+            paneForScrubberPosition(
+                position = 300f,
+                width = 500f,
+                pageCount = 6,
+                pagesPerPane = 2,
+            ),
+        )
+    }
+
+    @Test
+    fun twoPageScrubberReportsTheVisibleSpread() {
+        assertEquals(0..1, scrubberPageRange(paneIndex = 0, pagesPerPane = 2, pageCount = 6))
+        assertEquals(2..3, scrubberPageRange(paneIndex = 1, pagesPerPane = 2, pageCount = 6))
+    }
+
+    @Test
+    fun finalOddPageFormsASinglePagePane() {
+        assertEquals(4..4, scrubberPageRange(paneIndex = 2, pagesPerPane = 2, pageCount = 5))
+    }
 }

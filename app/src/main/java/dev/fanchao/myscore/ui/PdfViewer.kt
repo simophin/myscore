@@ -243,16 +243,13 @@ fun PdfViewer(
                                     PageScrubber(
                                         renderer = pdf.renderer,
                                         pageCount = pdf.renderer.pageCount,
-                                        currentPage = (
-                                            pagerState.currentPage * effectivePagesPerPane
-                                        ).coerceAtMost(pdf.renderer.pageCount - 1),
+                                        currentPane = pagerState.currentPage,
+                                        pagesPerPane = effectivePagesPerPane,
                                         paperModeEnabled = paperModeEnabled,
                                         modifier = Modifier.align(Alignment.BottomCenter),
-                                        onPageSelected = { pageIndex ->
+                                        onPaneSelected = { paneIndex ->
                                             scope.launch {
-                                                pagerState.animateScrollToPage(
-                                                    pageIndex / effectivePagesPerPane,
-                                                )
+                                                pagerState.animateScrollToPage(paneIndex)
                                             }
                                         },
                                     )
@@ -375,14 +372,24 @@ fun PdfViewer(
 private fun PageScrubber(
     renderer: PdfRenderer,
     pageCount: Int,
-    currentPage: Int,
+    currentPane: Int,
+    pagesPerPane: Int,
     paperModeEnabled: Boolean,
-    onPageSelected: (Int) -> Unit,
+    onPaneSelected: (Int) -> Unit,
     modifier: Modifier = Modifier,
 ) {
     if (pageCount <= 0) return
-    var scrubbedPage by remember { mutableStateOf<Int?>(null) }
-    val selectedPage = scrubbedPage ?: currentPage.coerceIn(0, pageCount - 1)
+    val paneCount = ceil(pageCount / pagesPerPane.toDouble()).toInt()
+    var scrubbedPane by remember { mutableStateOf<Int?>(null) }
+    val selectedPane = scrubbedPane ?: currentPane.coerceIn(0, paneCount - 1)
+    val selectedPages = scrubberPageRange(selectedPane, pagesPerPane, pageCount)
+    val firstSelectedPage = selectedPages.first
+    val lastSelectedPage = selectedPages.last
+    val pageRangeDescription = if (firstSelectedPage == lastSelectedPage) {
+        "page ${firstSelectedPage + 1} of $pageCount"
+    } else {
+        "pages ${firstSelectedPage + 1}–${lastSelectedPage + 1} of $pageCount"
+    }
 
     Box(
         modifier = modifier
@@ -390,7 +397,8 @@ private fun PageScrubber(
             .navigationBarsPadding(),
         contentAlignment = Alignment.BottomCenter,
     ) {
-        scrubbedPage?.let { pageIndex ->
+        scrubbedPane?.let { paneIndex ->
+            val previewPages = scrubberPageRange(paneIndex, pagesPerPane, pageCount)
             Surface(
                 modifier = Modifier
                     .align(Alignment.BottomCenter)
@@ -406,19 +414,23 @@ private fun PageScrubber(
                 ) {
                     Box(
                         modifier = Modifier
-                            .width(150.dp)
+                            .width(if (previewPages.count() == 1) 150.dp else 260.dp)
                             .height(190.dp)
                             .background(paperModeBackgroundColor(paperModeEnabled)),
                         contentAlignment = Alignment.Center,
                     ) {
-                        PdfPageThumbnail(
+                        PdfPaneThumbnail(
                             renderer = renderer,
-                            pageIndex = pageIndex,
+                            pages = previewPages,
                             paperModeEnabled = paperModeEnabled,
                         )
                     }
                     Text(
-                        text = "Page ${pageIndex + 1} of $pageCount",
+                        text = if (previewPages.first == previewPages.last) {
+                            "Page ${previewPages.first + 1} of $pageCount"
+                        } else {
+                            "Pages ${previewPages.first + 1}–${previewPages.last + 1} of $pageCount"
+                        },
                         modifier = Modifier.padding(top = 6.dp),
                         style = MaterialTheme.typography.labelLarge,
                     )
@@ -440,46 +452,48 @@ private fun PageScrubber(
                     .fillMaxWidth()
                     .height(48.dp)
                     .semantics {
-                        contentDescription = "Page scrubber, page ${selectedPage + 1} of $pageCount"
+                        contentDescription = "Page scrubber, $pageRangeDescription"
                         progressBarRangeInfo = ProgressBarRangeInfo(
-                            current = selectedPage.toFloat(),
-                            range = 0f..(pageCount - 1).toFloat(),
-                            steps = (pageCount - 2).coerceAtLeast(0),
+                            current = selectedPane.toFloat(),
+                            range = 0f..(paneCount - 1).toFloat(),
+                            steps = (paneCount - 2).coerceAtLeast(0),
                         )
                         setProgress { value ->
-                            onPageSelected(value.roundToInt().coerceIn(0, pageCount - 1))
+                            onPaneSelected(value.roundToInt().coerceIn(0, paneCount - 1))
                             true
                         }
                     }
-                    .pointerInput(pageCount) {
+                    .pointerInput(pageCount, pagesPerPane) {
                         awaitEachGesture {
                             val down = awaitFirstDown()
-                            var targetPage = pageForScrubberPosition(
+                            var targetPane = paneForScrubberPosition(
                                 position = down.position.x,
                                 width = size.width.toFloat(),
                                 pageCount = pageCount,
+                                pagesPerPane = pagesPerPane,
                                 horizontalInset = 12.dp.toPx(),
                             )
-                            scrubbedPage = targetPage
+                            scrubbedPane = targetPane
                             down.consume()
                             var released = false
                             do {
                                 val event = awaitPointerEvent()
                                 val change = event.changes.firstOrNull { it.id == down.id }
                                     ?: break
-                                targetPage = pageForScrubberPosition(
+                                targetPane = paneForScrubberPosition(
                                     position = change.position.x,
                                     width = size.width.toFloat(),
                                     pageCount = pageCount,
+                                    pagesPerPane = pagesPerPane,
                                     horizontalInset = 12.dp.toPx(),
                                 )
-                                scrubbedPage = targetPage
+                                scrubbedPane = targetPane
                                 change.consume()
                                 if (!change.pressed) released = true
                             } while (!released)
 
-                            scrubbedPage = null
-                            if (released) onPageSelected(targetPage)
+                            scrubbedPane = null
+                            if (released) onPaneSelected(targetPane)
                         }
                     },
             ) {
@@ -510,17 +524,52 @@ private fun PageScrubber(
                         center = Offset(startX + (endX - startX) * fraction, centerY),
                     )
                 }
-                val selectedFraction = if (pageCount == 1) {
-                    0.5f
-                } else {
-                    selectedPage / (pageCount - 1f)
-                }
-                drawCircle(
-                    color = ComposeColor.White,
-                    radius = 6.dp.toPx(),
-                    center = Offset(startX + (endX - startX) * selectedFraction, centerY),
+                val firstSelectedX = pagePositionOnScrubber(
+                    pageIndex = firstSelectedPage,
+                    pageCount = pageCount,
+                    startX = startX,
+                    endX = endX,
                 )
+                val lastSelectedX = pagePositionOnScrubber(
+                    pageIndex = lastSelectedPage,
+                    pageCount = pageCount,
+                    startX = startX,
+                    endX = endX,
+                )
+                if (firstSelectedPage != lastSelectedPage) {
+                    drawLine(
+                        color = ComposeColor.White,
+                        start = Offset(firstSelectedX, centerY),
+                        end = Offset(lastSelectedX, centerY),
+                        strokeWidth = 6.dp.toPx(),
+                    )
+                }
+                listOf(firstSelectedX, lastSelectedX).distinct().forEach { selectedX ->
+                    drawCircle(
+                        color = ComposeColor.White,
+                        radius = 6.dp.toPx(),
+                        center = Offset(selectedX, centerY),
+                    )
+                }
             }
+        }
+    }
+}
+
+@Composable
+private fun PdfPaneThumbnail(
+    renderer: PdfRenderer,
+    pages: IntRange,
+    paperModeEnabled: Boolean,
+) {
+    androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
+        pages.forEach { pageIndex ->
+            PdfPageThumbnail(
+                renderer = renderer,
+                pageIndex = pageIndex,
+                paperModeEnabled = paperModeEnabled,
+                modifier = Modifier.weight(1f),
+            )
         }
     }
 }
@@ -530,6 +579,7 @@ private fun PdfPageThumbnail(
     renderer: PdfRenderer,
     pageIndex: Int,
     paperModeEnabled: Boolean,
+    modifier: Modifier = Modifier,
 ) {
     val bitmap by produceState<Bitmap?>(null, renderer, pageIndex, paperModeEnabled) {
         val rendered = withContext(Dispatchers.IO) {
@@ -554,17 +604,52 @@ private fun PdfPageThumbnail(
         onDispose { rendered?.recycle() }
     }
     if (rendered == null) {
-        CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 2.dp)
+        Box(modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
+            CircularProgressIndicator(modifier = Modifier.size(28.dp), strokeWidth = 2.dp)
+        }
     } else {
         Image(
             bitmap = rendered.asImageBitmap(),
             contentDescription = "Preview of page ${pageIndex + 1}",
-            modifier = Modifier
+            modifier = modifier
                 .fillMaxSize()
                 .padding(6.dp),
             contentScale = ContentScale.Fit,
         )
     }
+}
+
+internal fun paneForScrubberPosition(
+    position: Float,
+    width: Float,
+    pageCount: Int,
+    pagesPerPane: Int,
+    horizontalInset: Float = 0f,
+): Int = pageForScrubberPosition(
+    position = position,
+    width = width,
+    pageCount = pageCount,
+    horizontalInset = horizontalInset,
+) / pagesPerPane
+
+internal fun scrubberPageRange(
+    paneIndex: Int,
+    pagesPerPane: Int,
+    pageCount: Int,
+): IntRange {
+    val firstPage = (paneIndex * pagesPerPane).coerceIn(0, pageCount - 1)
+    val lastPage = (firstPage + pagesPerPane - 1).coerceAtMost(pageCount - 1)
+    return firstPage..lastPage
+}
+
+private fun pagePositionOnScrubber(
+    pageIndex: Int,
+    pageCount: Int,
+    startX: Float,
+    endX: Float,
+): Float {
+    val fraction = if (pageCount == 1) 0.5f else pageIndex / (pageCount - 1f)
+    return startX + (endX - startX) * fraction
 }
 
 internal fun pageForScrubberPosition(
