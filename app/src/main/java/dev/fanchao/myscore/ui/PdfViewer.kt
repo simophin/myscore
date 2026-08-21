@@ -439,136 +439,136 @@ private fun PageScrubber(
             }
         }
 
-        Surface(
+        Canvas(
             modifier = Modifier
                 .fillMaxWidth()
-                .padding(horizontal = 16.dp, vertical = 12.dp),
-            shape = RoundedCornerShape(16.dp),
-            color = if (scrubberPressed) {
-                ViewerScrubberActiveColor
-            } else {
-                ViewerScrubberIdleColor
-            },
-            contentColor = ComposeColor.White,
-            shadowElevation = 4.dp,
-        ) {
-            Canvas(
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .height(48.dp)
-                    .semantics {
-                        contentDescription = "Page scrubber, $pageRangeDescription"
-                        progressBarRangeInfo = ProgressBarRangeInfo(
-                            current = selectedPane.toFloat(),
-                            range = 0f..(paneCount - 1).toFloat(),
-                            steps = (paneCount - 2).coerceAtLeast(0),
+                .padding(horizontal = 24.dp, vertical = 12.dp)
+                .height(48.dp)
+                .semantics {
+                    contentDescription = "Page scrubber, $pageRangeDescription"
+                    progressBarRangeInfo = ProgressBarRangeInfo(
+                        current = selectedPane.toFloat(),
+                        range = 0f..(paneCount - 1).toFloat(),
+                        steps = (paneCount - 2).coerceAtLeast(0),
+                    )
+                    setProgress { value ->
+                        onPaneSelected(value.roundToInt().coerceIn(0, paneCount - 1))
+                        true
+                    }
+                }
+                .pointerInput(pageCount, pagesPerPane) {
+                    awaitEachGesture {
+                        val down = awaitFirstDown()
+                        scrubberPressed = true
+                        var targetPane = paneForScrubberPosition(
+                            position = down.position.x,
+                            width = size.width.toFloat(),
+                            pageCount = pageCount,
+                            pagesPerPane = pagesPerPane,
+                            horizontalInset = 12.dp.toPx(),
                         )
-                        setProgress { value ->
-                            onPaneSelected(value.roundToInt().coerceIn(0, paneCount - 1))
-                            true
-                        }
-                    }
-                    .pointerInput(pageCount, pagesPerPane) {
-                        awaitEachGesture {
-                            val down = awaitFirstDown()
-                            scrubberPressed = true
-                            var targetPane = paneForScrubberPosition(
-                                position = down.position.x,
-                                width = size.width.toFloat(),
-                                pageCount = pageCount,
-                                pagesPerPane = pagesPerPane,
-                                horizontalInset = 12.dp.toPx(),
-                            )
-                            down.consume()
-                            var dragging = false
-                            var released = false
-                            try {
-                                do {
-                                    val event = awaitPointerEvent()
-                                    val change = event.changes.firstOrNull { it.id == down.id }
-                                        ?: break
-                                    targetPane = paneForScrubberPosition(
-                                        position = change.position.x,
-                                        width = size.width.toFloat(),
-                                        pageCount = pageCount,
-                                        pagesPerPane = pagesPerPane,
-                                        horizontalInset = 12.dp.toPx(),
+                        down.consume()
+                        var dragging = false
+                        var released = false
+                        try {
+                            do {
+                                val event = awaitPointerEvent()
+                                val change = event.changes.firstOrNull { it.id == down.id }
+                                    ?: break
+                                targetPane = paneForScrubberPosition(
+                                    position = change.position.x,
+                                    width = size.width.toFloat(),
+                                    pageCount = pageCount,
+                                    pagesPerPane = pagesPerPane,
+                                    horizontalInset = 12.dp.toPx(),
+                                )
+                                if (
+                                    !dragging && isScrubberDrag(
+                                        startPosition = down.position.x,
+                                        currentPosition = change.position.x,
+                                        touchSlop = viewConfiguration.touchSlop,
                                     )
-                                    if (
-                                        !dragging && isScrubberDrag(
-                                            startPosition = down.position.x,
-                                            currentPosition = change.position.x,
-                                            touchSlop = viewConfiguration.touchSlop,
-                                        )
-                                    ) {
-                                        dragging = true
-                                    }
-                                    if (dragging) scrubbedPane = targetPane
-                                    change.consume()
-                                    if (!change.pressed) released = true
-                                } while (!released)
-                            } finally {
-                                scrubberPressed = false
-                                scrubbedPane = null
-                            }
-                            if (released) onPaneSelected(targetPane)
+                                ) {
+                                    dragging = true
+                                }
+                                if (dragging) scrubbedPane = targetPane
+                                change.consume()
+                                if (!change.pressed) released = true
+                            } while (!released)
+                        } finally {
+                            scrubberPressed = false
+                            scrubbedPane = null
                         }
-                    },
-            ) {
-                val horizontalInset = 12.dp.toPx()
-                val startX = horizontalInset
-                val endX = (size.width - horizontalInset).coerceAtLeast(startX)
-                val centerY = size.height / 2f
-                drawLine(
-                    color = ComposeColor.White.copy(alpha = 0.46f),
-                    start = Offset(startX, centerY),
-                    end = Offset(endX, centerY),
-                    strokeWidth = 2.dp.toPx(),
-                )
-                val markerCount = pageScrubberMarkerCount(
-                    pageCount = pageCount,
-                    availableWidth = endX - startX,
-                    minimumSpacing = 10.dp.toPx(),
-                )
-                repeat(markerCount) { markerIndex ->
-                    val fraction = if (markerCount == 1) {
-                        0.5f
-                    } else {
-                        markerIndex / (markerCount - 1f)
+                        if (released) onPaneSelected(targetPane)
                     }
-                    drawCircle(
-                        color = ComposeColor.White.copy(alpha = 0.72f),
-                        radius = 2.dp.toPx(),
-                        center = Offset(startX + (endX - startX) * fraction, centerY),
-                    )
+                },
+        ) {
+            val horizontalInset = 12.dp.toPx()
+            val startX = horizontalInset
+            val endX = (size.width - horizontalInset).coerceAtLeast(startX)
+            val centerY = size.height / 2f
+            val backgroundColor = ComposeColor.Black.copy(
+                alpha = if (scrubberPressed) 0.52f else 0.18f,
+            )
+            val trackColor = ComposeColor.White.copy(
+                alpha = if (scrubberPressed) 0.66f else 0.42f,
+            )
+            val markerColor = ComposeColor.White.copy(
+                alpha = if (scrubberPressed) 0.80f else 0.60f,
+            )
+            val selectedColor = ComposeColor.White.copy(
+                alpha = if (scrubberPressed) 1f else 0.92f,
+            )
+            drawRect(color = backgroundColor)
+            drawLine(
+                color = trackColor,
+                start = Offset(startX, centerY),
+                end = Offset(endX, centerY),
+                strokeWidth = 2.dp.toPx(),
+            )
+            val markerCount = pageScrubberMarkerCount(
+                pageCount = pageCount,
+                availableWidth = endX - startX,
+                minimumSpacing = 10.dp.toPx(),
+            )
+            repeat(markerCount) { markerIndex ->
+                val fraction = if (markerCount == 1) {
+                    0.5f
+                } else {
+                    markerIndex / (markerCount - 1f)
                 }
-                val firstSelectedX = pagePositionOnScrubber(
-                    pageIndex = firstSelectedPage,
-                    pageCount = pageCount,
-                    startX = startX,
-                    endX = endX,
+                drawCircle(
+                    color = markerColor,
+                    radius = 2.dp.toPx(),
+                    center = Offset(startX + (endX - startX) * fraction, centerY),
                 )
-                val lastSelectedX = pagePositionOnScrubber(
-                    pageIndex = lastSelectedPage,
-                    pageCount = pageCount,
-                    startX = startX,
-                    endX = endX,
+            }
+            val firstSelectedX = pagePositionOnScrubber(
+                pageIndex = firstSelectedPage,
+                pageCount = pageCount,
+                startX = startX,
+                endX = endX,
+            )
+            val lastSelectedX = pagePositionOnScrubber(
+                pageIndex = lastSelectedPage,
+                pageCount = pageCount,
+                startX = startX,
+                endX = endX,
+            )
+            if (firstSelectedPage != lastSelectedPage) {
+                drawLine(
+                    color = selectedColor,
+                    start = Offset(firstSelectedX, centerY),
+                    end = Offset(lastSelectedX, centerY),
+                    strokeWidth = 6.dp.toPx(),
                 )
-                if (firstSelectedPage != lastSelectedPage) {
-                    drawLine(
-                        color = ComposeColor.White,
-                        start = Offset(firstSelectedX, centerY),
-                        end = Offset(lastSelectedX, centerY),
-                        strokeWidth = 6.dp.toPx(),
-                    )
-                }
-                listOf(firstSelectedX, lastSelectedX).distinct().forEach { selectedX ->
-                    drawCircle(
-                        color = ComposeColor.White,
-                        radius = 6.dp.toPx(),
-                        center = Offset(selectedX, centerY),
-                    )
-                }
+            }
+            listOf(firstSelectedX, lastSelectedX).distinct().forEach { selectedX ->
+                drawCircle(
+                    color = selectedColor,
+                    radius = 6.dp.toPx(),
+                    center = Offset(selectedX, centerY),
+                )
             }
         }
     }
@@ -952,7 +952,6 @@ private fun PdfPage(
 
 private const val ZoomFlingMinimumVelocity = 80f
 private val ViewerAppBarColor = ComposeColor.Black.copy(alpha = 0.58f)
-private val ViewerScrubberIdleColor = ComposeColor.Black.copy(alpha = 0.34f)
 private val ViewerScrubberActiveColor = ComposeColor.Black.copy(alpha = 0.76f)
 
 internal fun isPagerScrollEnabled(
