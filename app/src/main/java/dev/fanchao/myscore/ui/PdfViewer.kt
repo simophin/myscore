@@ -12,6 +12,7 @@ import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
+import androidx.compose.foundation.isSystemInDarkTheme
 import androidx.compose.foundation.gestures.awaitEachGesture
 import androidx.compose.foundation.gestures.awaitFirstDown
 import androidx.compose.foundation.gestures.detectTapGestures
@@ -19,7 +20,6 @@ import androidx.compose.foundation.gestures.rememberTransformableState
 import androidx.compose.foundation.gestures.transformable
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.BoxWithConstraints
-import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
@@ -36,9 +36,7 @@ import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.IconButton
-import androidx.compose.material3.FilledTonalIconButton
 import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
@@ -65,7 +63,6 @@ import androidx.compose.ui.graphics.Color as ComposeColor
 import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.luminance
-import androidx.compose.ui.graphics.toArgb
 import androidx.compose.ui.input.pointer.PointerEventPass
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.input.pointer.util.VelocityTracker
@@ -90,9 +87,6 @@ import kotlin.math.abs
 import androidx.core.graphics.createBitmap
 import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
-import androidx.core.view.WindowInsetsCompat
-import androidx.core.view.WindowInsetsControllerCompat
-import androidx.activity.compose.BackHandler
 
 private class OpenPdf(val descriptor: ParcelFileDescriptor, val renderer: PdfRenderer) : AutoCloseable {
     override fun close() {
@@ -117,19 +111,14 @@ fun PdfViewer(
     val documentUri = remember(score.uri) { score.uri.toUri() }
     var openPdf by remember(score.uri) { mutableStateOf<OpenPdf?>(null) }
     var error by remember(score.uri) { mutableStateOf<String?>(null) }
-    var fullScreen by rememberSaveable(score.uri) { mutableStateOf(false) }
+    var appBarVisible by rememberSaveable(score.uri) { mutableStateOf(true) }
     var readerOptionsExpanded by remember { mutableStateOf(false) }
     var anchorPage by remember(score.uri) { mutableIntStateOf(initialPage) }
     val documentBackgroundColor = paperModeBackgroundColor(paperModeEnabled)
-    ImmersiveSystemBars(fullScreen)
     ReaderSystemBars(
-        paperModeEnabled = paperModeEnabled,
-        fullScreen = fullScreen,
+        appBarVisible = appBarVisible,
         backgroundColor = documentBackgroundColor,
     )
-    BackHandler {
-        if (fullScreen) fullScreen = false else onBack()
-    }
 
     DisposableEffect(documentUri) {
         runCatching {
@@ -146,131 +135,16 @@ fun PdfViewer(
             .background(documentBackgroundColor)
             .keepScreenOn(),
     ) {
-    Scaffold(
-        containerColor = documentBackgroundColor,
-        topBar = {
-            if (!fullScreen) {
-                TopAppBar(
-                    colors = TopAppBarDefaults.topAppBarColors(
-                        containerColor = documentBackgroundColor,
-                    ),
-                    navigationIcon = {
-                        IconButton(onClick = onBack) {
-                            Icon(
-                                imageVector = Icons.AutoMirrored.Filled.ArrowBack,
-                                contentDescription = "Back to scores",
-                            )
-                        }
-                    },
-                    title = { Text(score.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
-                    actions = {
-                        Box {
-                            IconButton(
-                                onClick = { readerOptionsExpanded = true },
-                                modifier = Modifier.semantics {
-                                    contentDescription = "Reader options"
-                                },
-                            ) {
-                                Icon(
-                                    painter = painterResource(R.drawable.ic_score_page_24),
-                                    contentDescription = null,
-                                )
-                            }
-                            DropdownMenu(
-                                expanded = readerOptionsExpanded,
-                                onDismissRequest = { readerOptionsExpanded = false },
-                            ) {
-                                openPdf?.let { pdf ->
-                                    DropdownMenuItem(
-                                        leadingIcon = {
-                                            Icon(
-                                                painter = painterResource(R.drawable.ic_score_page_24),
-                                                contentDescription = null,
-                                            )
-                                        },
-                                        text = { Text("${pdf.renderer.pageCount} pages") },
-                                        enabled = false,
-                                        onClick = {},
-                                    )
-                                    HorizontalDivider()
-                                }
-                                DropdownMenuItem(
-                                    leadingIcon = {
-                                        Icon(
-                                            painter = painterResource(R.drawable.ic_paper_mode_24),
-                                            contentDescription = null,
-                                        )
-                                    },
-                                    trailingIcon = {
-                                        if (paperModeEnabled) {
-                                            Icon(
-                                                imageVector = Icons.Filled.Check,
-                                                contentDescription = null,
-                                                modifier = Modifier.size(18.dp),
-                                            )
-                                        }
-                                    },
-                                    text = { Text("Paper mode") },
-                                    onClick = {
-                                        readerOptionsExpanded = false
-                                        onPaperModeChanged(!paperModeEnabled)
-                                    },
-                                )
-                                HorizontalDivider()
-                                PageLayoutPreference.entries.forEach { preference ->
-                                    DropdownMenuItem(
-                                        leadingIcon = {
-                                            if (preference == layoutPreference) {
-                                                Icon(
-                                                    imageVector = Icons.Filled.Check,
-                                                    contentDescription = null,
-                                                    modifier = Modifier.size(18.dp),
-                                                )
-                                            } else {
-                                                Spacer(Modifier.size(18.dp))
-                                            }
-                                        },
-                                        text = {
-                                            Text(
-                                                when (preference) {
-                                                    PageLayoutPreference.Auto -> "Layout: Auto"
-                                                    PageLayoutPreference.Single -> "Layout: Single page"
-                                                    PageLayoutPreference.Two -> "Layout: Two pages"
-                                                },
-                                            )
-                                        },
-                                        onClick = {
-                                            readerOptionsExpanded = false
-                                            onLayoutPreferenceChanged(preference)
-                                        },
-                                    )
-                                }
-                            }
-                        }
-                        IconButton(
-                            onClick = { fullScreen = true },
-                            modifier = Modifier.semantics { contentDescription = "Enter full screen" },
-                        ) {
-                            Icon(
-                                painter = painterResource(R.drawable.ic_fullscreen_24),
-                                contentDescription = null,
-                            )
-                        }
-                    },
-                )
-            }
-        },
-    ) { padding ->
         when {
-            error != null -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            error != null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 Text(error.orEmpty(), color = MaterialTheme.colorScheme.error)
             }
-            openPdf == null -> Box(Modifier.fillMaxSize().padding(padding), contentAlignment = Alignment.Center) {
+            openPdf == null -> Box(Modifier.fillMaxSize(), contentAlignment = Alignment.Center) {
                 CircularProgressIndicator()
             }
             else -> {
                 val pdf = requireNotNull(openPdf)
-                Box(Modifier.fillMaxSize().padding(padding)) {
+                Box(Modifier.fillMaxSize()) {
                     AdaptivePageLayout(
                         preference = layoutPreference,
                         modifier = Modifier.fillMaxSize(),
@@ -315,6 +189,10 @@ fun PdfViewer(
                                         pageIndex = firstPage,
                                         paperModeEnabled = paperModeEnabled,
                                         modifier = Modifier.weight(1f),
+                                        onTap = {
+                                            readerOptionsExpanded = false
+                                            appBarVisible = !appBarVisible
+                                        },
                                         onZoomChanged = { zoomed ->
                                             zoomedPageIndices = zoomedPageIndices.withZoomState(
                                                 firstPage,
@@ -331,6 +209,10 @@ fun PdfViewer(
                                             pageIndex = firstPage + 1,
                                             paperModeEnabled = paperModeEnabled,
                                             modifier = Modifier.weight(1f),
+                                            onTap = {
+                                                readerOptionsExpanded = false
+                                                appBarVisible = !appBarVisible
+                                            },
                                             onZoomChanged = { zoomed ->
                                                 zoomedPageIndices = zoomedPageIndices.withZoomState(
                                                     firstPage + 1,
@@ -346,20 +228,110 @@ fun PdfViewer(
                 }
             }
         }
-    }
-        if (fullScreen) {
-            FilledTonalIconButton(
-                onClick = { fullScreen = false },
-                modifier = Modifier
-                    .align(Alignment.TopEnd)
-                    .padding(12.dp)
-                    .semantics { contentDescription = "Exit full screen" },
-            ) {
-                Icon(
-                    painter = painterResource(R.drawable.ic_fullscreen_exit_24),
-                    contentDescription = null,
-                )
-            }
+        if (appBarVisible) {
+            TopAppBar(
+                modifier = Modifier.align(Alignment.TopCenter),
+                colors = TopAppBarDefaults.topAppBarColors(
+                    containerColor = ViewerAppBarColor,
+                    navigationIconContentColor = ComposeColor.White,
+                    titleContentColor = ComposeColor.White,
+                    actionIconContentColor = ComposeColor.White,
+                ),
+                navigationIcon = {
+                    IconButton(onClick = onBack) {
+                        Icon(
+                            imageVector = Icons.AutoMirrored.Filled.ArrowBack,
+                            contentDescription = "Back to scores",
+                        )
+                    }
+                },
+                title = { Text(score.title, maxLines = 1, overflow = TextOverflow.Ellipsis) },
+                actions = {
+                    Box {
+                        IconButton(
+                            onClick = { readerOptionsExpanded = true },
+                            modifier = Modifier.semantics {
+                                contentDescription = "Reader options"
+                            },
+                        ) {
+                            Icon(
+                                painter = painterResource(R.drawable.ic_score_page_24),
+                                contentDescription = null,
+                            )
+                        }
+                        DropdownMenu(
+                            expanded = readerOptionsExpanded,
+                            onDismissRequest = { readerOptionsExpanded = false },
+                        ) {
+                            openPdf?.let { pdf ->
+                                DropdownMenuItem(
+                                    leadingIcon = {
+                                        Icon(
+                                            painter = painterResource(R.drawable.ic_score_page_24),
+                                            contentDescription = null,
+                                        )
+                                    },
+                                    text = { Text("${pdf.renderer.pageCount} pages") },
+                                    enabled = false,
+                                    onClick = {},
+                                )
+                                HorizontalDivider()
+                            }
+                            DropdownMenuItem(
+                                leadingIcon = {
+                                    Icon(
+                                        painter = painterResource(R.drawable.ic_paper_mode_24),
+                                        contentDescription = null,
+                                    )
+                                },
+                                trailingIcon = {
+                                    if (paperModeEnabled) {
+                                        Icon(
+                                            imageVector = Icons.Filled.Check,
+                                            contentDescription = null,
+                                            modifier = Modifier.size(18.dp),
+                                        )
+                                    }
+                                },
+                                text = { Text("Paper mode") },
+                                onClick = {
+                                    readerOptionsExpanded = false
+                                    onPaperModeChanged(!paperModeEnabled)
+                                },
+                            )
+                            HorizontalDivider()
+                            PageLayoutPreference.entries.forEach { preference ->
+                                DropdownMenuItem(
+                                    leadingIcon = {
+                                        if (preference == layoutPreference) {
+                                            Icon(
+                                                imageVector = Icons.Filled.Check,
+                                                contentDescription = null,
+                                                modifier = Modifier.size(18.dp),
+                                            )
+                                        } else {
+                                            Spacer(Modifier.size(18.dp))
+                                        }
+                                    },
+                                    text = {
+                                        Text(
+                                            when (preference) {
+                                                PageLayoutPreference.Auto -> "Layout: Auto"
+                                                PageLayoutPreference.Single -> "Layout: Single page"
+                                                PageLayoutPreference.Two -> "Layout: Two pages"
+                                            },
+                                        )
+                                    },
+                                    onClick = {
+                                        readerOptionsExpanded = false
+                                        onLayoutPreferenceChanged(preference)
+                                    },
+                                )
+                            }
+                        }
+                    }
+                },
+            )
         }
     }
 }
@@ -383,38 +355,24 @@ private val PageLayoutPreference.label: String
     }
 
 @Composable
-private fun ImmersiveSystemBars(enabled: Boolean) {
-    val activity = LocalContext.current.findActivity() ?: return
-    DisposableEffect(activity, enabled) {
-        val controller = WindowCompat.getInsetsController(activity.window, activity.window.decorView)
-        if (enabled) {
-            controller.systemBarsBehavior =
-                WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
-            controller.hide(WindowInsetsCompat.Type.systemBars())
-        } else {
-            controller.show(WindowInsetsCompat.Type.systemBars())
-        }
-        onDispose {
-            if (enabled) controller.show(WindowInsetsCompat.Type.systemBars())
-        }
-    }
-}
-
-@Composable
 private fun ReaderSystemBars(
-    paperModeEnabled: Boolean,
-    fullScreen: Boolean,
+    appBarVisible: Boolean,
     backgroundColor: ComposeColor,
 ) {
     val activity = LocalContext.current.findActivity() ?: return
-    val usePaperSystemBars = paperModeEnabled && fullScreen
+    val restoreDarkIcons by rememberUpdatedState(!isSystemInDarkTheme())
+    DisposableEffect(activity) {
+        onDispose {
+            WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
+                isAppearanceLightStatusBars = restoreDarkIcons
+                isAppearanceLightNavigationBars = restoreDarkIcons
+            }
+        }
+    }
     SideEffect {
-        activity.window.statusBarColor = if (usePaperSystemBars) backgroundColor.toArgb() else Color.TRANSPARENT
-        activity.window.navigationBarColor = if (usePaperSystemBars) backgroundColor.toArgb() else Color.TRANSPARENT
         WindowCompat.getInsetsController(activity.window, activity.window.decorView).apply {
-            val useDarkIcons = backgroundColor.luminance() > 0.5f
-            isAppearanceLightStatusBars = useDarkIcons
-            isAppearanceLightNavigationBars = useDarkIcons
+            isAppearanceLightStatusBars = !appBarVisible && backgroundColor.luminance() > 0.5f
+            isAppearanceLightNavigationBars = backgroundColor.luminance() > 0.5f
         }
     }
 }
@@ -431,6 +389,7 @@ private fun PdfPage(
     pageIndex: Int,
     paperModeEnabled: Boolean,
     modifier: Modifier = Modifier,
+    onTap: () -> Unit,
     onZoomChanged: (Boolean) -> Unit,
 ) {
     val bitmap by produceState<Bitmap?>(initialValue = null, renderer, pageIndex, paperModeEnabled) {
@@ -456,6 +415,7 @@ private fun PdfPage(
     var offsetY by remember(pageIndex) { mutableFloatStateOf(0f) }
     var viewportSize by remember(pageIndex) { mutableStateOf(IntSize.Zero) }
     val currentScale by rememberUpdatedState(scale)
+    val currentOnTap by rememberUpdatedState(onTap)
     val currentOnZoomChanged by rememberUpdatedState(onZoomChanged)
     val scope = rememberCoroutineScope()
     val offsetXAnimation = remember(pageIndex) { Animatable(0f) }
@@ -514,33 +474,36 @@ private fun PdfPage(
                         translationY = offsetY,
                     )
                     .pointerInput(pageIndex) {
-                        detectTapGestures(onDoubleTap = { tap ->
-                            if (currentScale > 1f) {
-                                scope.launch {
-                                    offsetXAnimation.stop()
-                                    offsetYAnimation.stop()
-                                    offsetXAnimation.snapTo(0f)
-                                    offsetYAnimation.snapTo(0f)
+                        detectTapGestures(
+                            onTap = { currentOnTap() },
+                            onDoubleTap = { tap ->
+                                if (currentScale > 1f) {
+                                    scope.launch {
+                                        offsetXAnimation.stop()
+                                        offsetYAnimation.stop()
+                                        offsetXAnimation.snapTo(0f)
+                                        offsetYAnimation.snapTo(0f)
+                                    }
+                                    scale = 1f
+                                    offsetX = 0f
+                                    offsetY = 0f
+                                    currentOnZoomChanged(false)
+                                } else {
+                                    scale = 2.5f
+                                    offsetX = constrainZoomOffset(
+                                        offset = (size.width / 2f - tap.x) * 1.5f,
+                                        containerSize = size.width,
+                                        scale = scale,
+                                    )
+                                    offsetY = constrainZoomOffset(
+                                        offset = (size.height / 2f - tap.y) * 1.5f,
+                                        containerSize = size.height,
+                                        scale = scale,
+                                    )
+                                    currentOnZoomChanged(true)
                                 }
-                                scale = 1f
-                                offsetX = 0f
-                                offsetY = 0f
-                                currentOnZoomChanged(false)
-                            } else {
-                                scale = 2.5f
-                                offsetX = constrainZoomOffset(
-                                    offset = (size.width / 2f - tap.x) * 1.5f,
-                                    containerSize = size.width,
-                                    scale = scale,
-                                )
-                                offsetY = constrainZoomOffset(
-                                    offset = (size.height / 2f - tap.y) * 1.5f,
-                                    containerSize = size.height,
-                                    scale = scale,
-                                )
-                                currentOnZoomChanged(true)
-                            }
-                        })
+                            },
+                        )
                     }
                     .pointerInput(pageIndex) {
                         awaitEachGesture {
@@ -625,6 +588,7 @@ private fun PdfPage(
 }
 
 private const val ZoomFlingMinimumVelocity = 80f
+private val ViewerAppBarColor = ComposeColor.Black.copy(alpha = 0.58f)
 
 internal fun isPagerScrollEnabled(
     currentPane: Int,
