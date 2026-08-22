@@ -4,6 +4,7 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Bitmap
+import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Color
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
@@ -394,7 +395,7 @@ private fun PageScrubber(
                 ) {
                     Box(
                         modifier = Modifier
-                            .width(if (previewPages.count() == 1) 150.dp else 260.dp)
+                            .width(if (pagesPerPane == 1) 150.dp else 260.dp)
                             .height(190.dp)
                             .background(paperModeBackgroundColor(paperModeEnabled)),
                         contentAlignment = Alignment.Center,
@@ -402,6 +403,7 @@ private fun PageScrubber(
                         PdfPaneThumbnail(
                             renderer = renderer,
                             pages = previewPages,
+                            pagesPerPane = pagesPerPane,
                             paperModeEnabled = paperModeEnabled,
                         )
                     }
@@ -563,16 +565,22 @@ private fun PageScrubber(
 private fun PdfPaneThumbnail(
     renderer: PdfRenderer,
     pages: IntRange,
+    pagesPerPane: Int,
     paperModeEnabled: Boolean,
 ) {
     androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
-        pages.forEach { pageIndex ->
-            PdfPageThumbnail(
-                renderer = renderer,
-                pageIndex = pageIndex,
-                paperModeEnabled = paperModeEnabled,
-                modifier = Modifier.weight(1f),
-            )
+        repeat(pagesPerPane) { pageOffset ->
+            val pageIndex = pages.first + pageOffset
+            if (pageIndex <= pages.last) {
+                PdfPageThumbnail(
+                    renderer = renderer,
+                    pageIndex = pageIndex,
+                    paperModeEnabled = paperModeEnabled,
+                    modifier = Modifier.weight(1f),
+                )
+            } else {
+                Spacer(Modifier.weight(1f))
+            }
         }
     }
 }
@@ -628,12 +636,13 @@ internal fun paneForScrubberPosition(
     pageCount: Int,
     pagesPerPane: Int,
     horizontalInset: Float = 0f,
-): Int = pageForScrubberPosition(
-    position = position,
-    width = width,
-    pageCount = pageCount,
-    horizontalInset = horizontalInset,
-) / pagesPerPane
+): Int {
+    val paneCount = ceil(pageCount / pagesPerPane.toDouble()).toInt()
+    val trackWidth = width - horizontalInset * 2f
+    if (paneCount <= 1 || trackWidth <= 0f) return 0
+    val fraction = ((position - horizontalInset) / trackWidth).coerceIn(0f, 1f)
+    return (fraction * (paneCount - 1)).roundToInt()
+}
 
 internal fun isScrubberDrag(
     startPosition: Float,
@@ -907,40 +916,72 @@ private fun PdfPane(
             ),
         contentAlignment = Alignment.Center,
     ) {
-        androidx.compose.foundation.layout.Row(Modifier.fillMaxSize()) {
-            repeat(pagesPerPane) { pageOffset ->
-                val pageIndex = firstPage + pageOffset
-                if (pageIndex < pageCount) {
-                    RenderedPdfPage(
-                        renderer = renderer,
-                        pageIndex = pageIndex,
-                        paperModeEnabled = paperModeEnabled,
-                        modifier = Modifier.weight(1f),
-                    )
-                }
-            }
-        }
+        RenderedPdfSpread(
+            renderer = renderer,
+            firstPage = firstPage,
+            pagesPerPane = pagesPerPane,
+            pageCount = pageCount,
+            paperModeEnabled = paperModeEnabled,
+        )
     }
 }
 
 @Composable
-private fun RenderedPdfPage(
+private fun RenderedPdfSpread(
     renderer: PdfRenderer,
-    pageIndex: Int,
+    firstPage: Int,
+    pagesPerPane: Int,
+    pageCount: Int,
     paperModeEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val bitmap by produceState<Bitmap?>(initialValue = null, renderer, pageIndex, paperModeEnabled) {
+    val lastPage = (firstPage + pagesPerPane - 1).coerceAtMost(pageCount - 1)
+    val bitmap by produceState<Bitmap?>(
+        initialValue = null,
+        renderer,
+        firstPage,
+        pagesPerPane,
+        pageCount,
+        paperModeEnabled,
+    ) {
         value = withContext(Dispatchers.IO) {
             synchronized(renderer) {
-                renderer.openPage(pageIndex).use { page ->
-                    val renderScale = (1600f / page.width).coerceAtMost(2f)
-                    val width = (page.width * renderScale).toInt().coerceAtLeast(1)
-                    val height = (page.height * renderScale).toInt().coerceAtLeast(1)
-                    createBitmap(width, height, Bitmap.Config.ARGB_8888).also { output ->
-                        output.eraseColor(if (paperModeEnabled) PAPER_COLOR else Color.WHITE)
-                        page.render(output, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                        if (paperModeEnabled) applyPaperMode(output)
+                val pageBitmaps = (firstPage..lastPage).map { pageIndex ->
+                    renderer.openPage(pageIndex).use { page ->
+                        val renderScale = (1600f / page.width).coerceAtMost(2f)
+                        val width = (page.width * renderScale).toInt().coerceAtLeast(1)
+                        val height = (page.height * renderScale).toInt().coerceAtLeast(1)
+                        createBitmap(width, height, Bitmap.Config.ARGB_8888).also { output ->
+                            output.eraseColor(
+                                if (paperModeEnabled) PAPER_COLOR else Color.WHITE,
+                            )
+                            page.render(
+                                output,
+                                null,
+                                null,
+                                PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY,
+                            )
+                            if (paperModeEnabled) applyPaperMode(output)
+                        }
+                    }
+                }
+                val slotWidth = pageBitmaps.maxOf { it.width }
+                val spreadHeight = pageBitmaps.maxOf { it.height }
+                createBitmap(
+                    slotWidth * pagesPerPane,
+                    spreadHeight,
+                    Bitmap.Config.ARGB_8888,
+                ).also { spread ->
+                    spread.eraseColor(if (paperModeEnabled) PAPER_COLOR else Color.WHITE)
+                    val canvas = AndroidCanvas(spread)
+                    pageBitmaps.forEachIndexed { slot, page ->
+                        canvas.drawBitmap(
+                            page,
+                            slot * slotWidth + (slotWidth - page.width) / 2f,
+                            (spreadHeight - page.height) / 2f,
+                            null,
+                        )
+                        page.recycle()
                     }
                 }
             }
@@ -954,7 +995,11 @@ private fun RenderedPdfPage(
     } else {
         Image(
             bitmap = rendered.asImageBitmap(),
-            contentDescription = "Page ${pageIndex + 1}",
+            contentDescription = if (firstPage == lastPage) {
+                "Page ${firstPage + 1}"
+            } else {
+                "Pages ${firstPage + 1}–${lastPage + 1}"
+            },
             modifier = modifier
                 .fillMaxSize()
                 .padding(vertical = 8.dp),

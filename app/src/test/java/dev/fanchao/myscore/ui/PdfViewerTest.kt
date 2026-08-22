@@ -180,6 +180,33 @@ class PdfViewerTest {
     }
 
     @Test
+    fun oddFinalPageGetsTheSameScrubberReachAsOtherPanes() {
+        assertEquals(
+            2,
+            paneForScrubberPosition(
+                position = 400f,
+                width = 500f,
+                pageCount = 5,
+                pagesPerPane = 2,
+            ),
+        )
+    }
+
+    @Test
+    fun twoPageScrubberHonorsItsTrackInsets() {
+        assertEquals(
+            2,
+            paneForScrubberPosition(
+                position = 412f,
+                width = 424f,
+                pageCount = 5,
+                pagesPerPane = 2,
+                horizontalInset = 12f,
+            ),
+        )
+    }
+
+    @Test
     fun twoPageScrubberReportsTheVisibleSpread() {
         assertEquals(0..1, scrubberPageRange(paneIndex = 0, pagesPerPane = 2, pageCount = 6))
         assertEquals(2..3, scrubberPageRange(paneIndex = 1, pagesPerPane = 2, pageCount = 6))
