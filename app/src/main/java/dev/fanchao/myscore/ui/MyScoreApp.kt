@@ -24,16 +24,18 @@ import androidx.compose.material3.DropdownMenu
 import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
-import androidx.compose.material3.MaterialTheme
-import androidx.compose.material3.NavigationBar
-import androidx.compose.material3.NavigationBarItem
-import androidx.compose.material3.NavigationRail
-import androidx.compose.material3.NavigationRailItem
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.Scaffold
+import androidx.compose.material3.ShortNavigationBar
+import androidx.compose.material3.ShortNavigationBarItem
 import androidx.compose.material3.Text
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.TopAppBarDefaults
+import androidx.compose.material3.WideNavigationRail
+import androidx.compose.material3.WideNavigationRailItem
+import androidx.compose.material3.WideNavigationRailValue
+import androidx.compose.material3.rememberWideNavigationRailState
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
@@ -103,16 +105,29 @@ fun MyScoreApp(
     }
     val containerSize = LocalWindowInfo.current.containerSize
     val useRail = shouldUseNavigationRail(containerSize.width, containerSize.height)
+    val wideNavigationRailState = rememberWideNavigationRailState()
     Row(Modifier.fillMaxSize()) {
         if (useRail) {
-            NavigationRail(modifier = Modifier.fillMaxHeight()) {
-                Text("MyScore", modifier = Modifier.padding(12.dp), fontWeight = FontWeight.SemiBold)
+            WideNavigationRail(
+                modifier = Modifier.fillMaxHeight(),
+                state = wideNavigationRailState,
+                header = {
+                    Text(
+                        "MyScore",
+                        modifier = Modifier.padding(12.dp),
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                },
+            ) {
                 AppTab.entries.forEach { tab ->
-                    NavigationRailItem(
+                    WideNavigationRailItem(
                         selected = selectedTab == tab,
                         onClick = { selectedTab = tab },
                         icon = { AppTabIcon(tab) },
                         label = { Text(tab.label) },
+                        railExpanded =
+                            wideNavigationRailState.targetValue ==
+                                WideNavigationRailValue.Expanded,
                     )
                 }
             }
@@ -252,9 +267,9 @@ fun MyScoreApp(
             },
             bottomBar = {
                 if (!useRail) {
-                    NavigationBar {
+                    ShortNavigationBar {
                         AppTab.entries.forEach { tab ->
-                            NavigationBarItem(
+                            ShortNavigationBarItem(
                                 selected = selectedTab == tab,
                                 onClick = { selectedTab = tab },
                                 icon = { AppTabIcon(tab) },
