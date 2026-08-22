@@ -77,6 +77,10 @@ class PdfIntentTest {
             composeRule.onNodeWithText("Layout: Two pages").performClick()
             composeRule.onNodeWithContentDescription("Page scrubber, pages 1–2 of 4")
                 .assertIsDisplayed()
+            composeRule.waitUntil(timeoutMillis = 5_000) {
+                composeRule.onAllNodesWithContentDescription("Pages 1–2")
+                    .fetchSemanticsNodes().isNotEmpty()
+            }
             composeRule.onNodeWithContentDescription("Pages 1–2").performTouchInput { doubleClick() }
             composeRule.onNodeWithContentDescription("Pages 1–2").performTouchInput { swipeLeft() }
             composeRule.onNodeWithContentDescription("Page scrubber, pages 1–2 of 4")

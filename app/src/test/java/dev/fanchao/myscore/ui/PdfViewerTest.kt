@@ -1,12 +1,95 @@
 package dev.fanchao.myscore.ui
 
 import androidx.compose.ui.graphics.Color
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.ExperimentalCoroutinesApi
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.async
+import kotlinx.coroutines.cancelAndJoin
+import kotlinx.coroutines.test.runCurrent
+import kotlinx.coroutines.test.runTest
+import kotlinx.coroutines.withContext
 import org.junit.Assert.assertFalse
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class PdfViewerTest {
+    @OptIn(ExperimentalCoroutinesApi::class)
+    @Test
+    fun cancelledQueuedRenderDoesNotRunAfterCurrentRender() = runTest {
+        val gate = CancellationAwareRenderGate()
+        val firstStarted = CompletableDeferred<Unit>()
+        val releaseFirst = CompletableDeferred<Unit>()
+        val executions = mutableListOf<String>()
+        val first = backgroundScope.async {
+            gate.run(disposeResult = {}) {
+                firstStarted.complete(Unit)
+                releaseFirst.await()
+                executions += "first"
+                "first"
+            }
+        }
+        firstStarted.await()
+
+        val obsolete = backgroundScope.async {
+            gate.run(disposeResult = {}) {
+                executions += "obsolete"
+                "obsolete"
+            }
+        }
+        runCurrent()
+        obsolete.cancelAndJoin()
+        val latest = backgroundScope.async {
+            gate.run(disposeResult = {}) {
+                executions += "latest"
+                "latest"
+            }
+        }
+
+        releaseFirst.complete(Unit)
+
+        assertEquals("first", first.await())
+        assertEquals("latest", latest.await())
+        assertEquals(listOf("first", "latest"), executions)
+    }
+
+    @Test
+    fun renderCompletedAfterCancellationIsDisposed() = runTest {
+        val gate = CancellationAwareRenderGate()
+        val renderStarted = CompletableDeferred<Unit>()
+        val releaseRender = CompletableDeferred<Unit>()
+        val disposedResults = mutableListOf<String>()
+        val request = backgroundScope.async {
+            gate.run(disposeResult = disposedResults::add) {
+                withContext(NonCancellable) {
+                    renderStarted.complete(Unit)
+                    releaseRender.await()
+                    "rendered"
+                }
+            }
+        }
+        renderStarted.await()
+
+        request.cancel()
+        releaseRender.complete(Unit)
+        request.join()
+
+        assertTrue(request.isCancelled)
+        assertEquals(listOf("rendered"), disposedResults)
+    }
+
+    @Test
+    fun fullPageRenderSizeKeepsExistingScaleCap() {
+        assertEquals(PdfBitmapSize(1190, 1684), pdfBitmapSize(595, 842))
+        assertEquals(PdfBitmapSize(1600, 800), pdfBitmapSize(2000, 1000))
+    }
+
+    @Test
+    fun thumbnailRenderSizeUsesRequestedWidth() {
+        assertEquals(PdfBitmapSize(320, 453), pdfBitmapSize(595, 842, targetWidth = 320))
+    }
+
     @Test
     fun paperModeBackgroundUsesPaperColorWhenEnabled() {
         assertEquals(
