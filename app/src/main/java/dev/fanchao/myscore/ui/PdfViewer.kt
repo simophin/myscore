@@ -4,8 +4,8 @@ import android.app.Activity
 import android.content.Context
 import android.content.ContextWrapper
 import android.graphics.Bitmap
-import android.graphics.Canvas as AndroidCanvas
 import android.graphics.Color
+import android.graphics.Rect
 import android.graphics.pdf.PdfRenderer
 import android.os.ParcelFileDescriptor
 import android.net.Uri
@@ -94,9 +94,14 @@ import dev.fanchao.myscore.R
 import dev.fanchao.myscore.data.ScoreDocument
 import dev.fanchao.myscore.data.PageLayoutPreference
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.currentCoroutineContext
+import kotlinx.coroutines.ensureActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.sync.Mutex
+import kotlinx.coroutines.sync.withLock
+import kotlin.coroutines.CoroutineContext
 import kotlin.math.ceil
 import kotlin.math.abs
 import kotlin.math.floor
@@ -106,9 +111,54 @@ import androidx.core.net.toUri
 import androidx.core.view.WindowCompat
 
 private class OpenPdf(val descriptor: ParcelFileDescriptor, val renderer: PdfRenderer) : AutoCloseable {
+    val renderCoordinator = PdfRenderCoordinator(renderer)
+
     override fun close() {
         synchronized(renderer) { renderer.close() }
         descriptor.close()
+    }
+}
+
+internal class CancellationAwareRenderGate {
+    private val mutex = Mutex()
+
+    suspend fun <T : Any> run(
+        disposeResult: (T) -> Unit,
+        produce: suspend (CoroutineContext) -> T,
+    ): T {
+        var result: T? = null
+        try {
+            mutex.withLock {
+                val requestContext = currentCoroutineContext()
+                requestContext.ensureActive()
+                result = produce(requestContext)
+                requestContext.ensureActive()
+            }
+            return requireNotNull(result).also { result = null }
+        } finally {
+            result?.let(disposeResult)
+        }
+    }
+}
+
+private class PdfRenderCoordinator(private val renderer: PdfRenderer) {
+    private val gate = CancellationAwareRenderGate()
+
+    suspend fun render(
+        block: (PdfRenderer, CoroutineContext) -> Bitmap,
+    ): Bitmap = gate.run(disposeResult = Bitmap::recycle) { requestContext ->
+        var rendered: Bitmap? = null
+        try {
+            withContext(Dispatchers.IO) {
+                synchronized(renderer) {
+                    requestContext.ensureActive()
+                    rendered = block(renderer, requestContext)
+                }
+            }
+            requireNotNull(rendered).also { rendered = null }
+        } finally {
+            rendered?.recycle()
+        }
     }
 }
 
@@ -202,7 +252,7 @@ fun PdfViewer(
                                 ) { paneIndex ->
                                     val firstPage = paneIndex * effectivePagesPerPane
                                     PdfPane(
-                                        renderer = pdf.renderer,
+                                        renderCoordinator = pdf.renderCoordinator,
                                         firstPage = firstPage,
                                         pagesPerPane = effectivePagesPerPane,
                                         pageCount = pdf.renderer.pageCount,
@@ -221,7 +271,7 @@ fun PdfViewer(
                                 }
                                 if (appBarVisible) {
                                     PageScrubber(
-                                        renderer = pdf.renderer,
+                                        renderCoordinator = pdf.renderCoordinator,
                                         pageCount = pdf.renderer.pageCount,
                                         currentPane = pagerState.currentPage,
                                         pagesPerPane = effectivePagesPerPane,
@@ -350,7 +400,7 @@ fun PdfViewer(
 
 @Composable
 private fun PageScrubber(
-    renderer: PdfRenderer,
+    renderCoordinator: PdfRenderCoordinator,
     pageCount: Int,
     currentPane: Int,
     pagesPerPane: Int,
@@ -401,7 +451,7 @@ private fun PageScrubber(
                         contentAlignment = Alignment.Center,
                     ) {
                         PdfPaneThumbnail(
-                            renderer = renderer,
+                            renderCoordinator = renderCoordinator,
                             pages = previewPages,
                             pagesPerPane = pagesPerPane,
                             paperModeEnabled = paperModeEnabled,
@@ -563,7 +613,7 @@ private fun PageScrubber(
 
 @Composable
 private fun PdfPaneThumbnail(
-    renderer: PdfRenderer,
+    renderCoordinator: PdfRenderCoordinator,
     pages: IntRange,
     pagesPerPane: Int,
     paperModeEnabled: Boolean,
@@ -573,7 +623,7 @@ private fun PdfPaneThumbnail(
             val pageIndex = pages.first + pageOffset
             if (pageIndex <= pages.last) {
                 PdfPageThumbnail(
-                    renderer = renderer,
+                    renderCoordinator = renderCoordinator,
                     pageIndex = pageIndex,
                     paperModeEnabled = paperModeEnabled,
                     modifier = Modifier.weight(1f),
@@ -587,28 +637,21 @@ private fun PdfPaneThumbnail(
 
 @Composable
 private fun PdfPageThumbnail(
-    renderer: PdfRenderer,
+    renderCoordinator: PdfRenderCoordinator,
     pageIndex: Int,
     paperModeEnabled: Boolean,
     modifier: Modifier = Modifier,
 ) {
-    val bitmap by produceState<Bitmap?>(null, renderer, pageIndex, paperModeEnabled) {
-        val rendered = withContext(Dispatchers.IO) {
-            synchronized(renderer) {
-                renderer.openPage(pageIndex).use { page ->
-                    val width = 320
-                    val height = (page.height * (width.toFloat() / page.width))
-                        .roundToInt()
-                        .coerceAtLeast(1)
-                    createBitmap(width, height, Bitmap.Config.ARGB_8888).also { output ->
-                        output.eraseColor(if (paperModeEnabled) PAPER_COLOR else Color.WHITE)
-                        page.render(output, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
-                        if (paperModeEnabled) applyPaperMode(output)
-                    }
-                }
-            }
+    val bitmap by produceState<Bitmap?>(null, renderCoordinator, pageIndex, paperModeEnabled) {
+        value = renderCoordinator.render { renderer, requestContext ->
+            renderPdfPageBitmap(
+                renderer = renderer,
+                pageIndex = pageIndex,
+                targetWidth = 320,
+                paperModeEnabled = paperModeEnabled,
+                requestContext = requestContext,
+            )
         }
-        value = rendered
     }
     val rendered = bitmap
     DisposableEffect(rendered) {
@@ -742,7 +785,7 @@ private tailrec fun Context.findActivity(): Activity? = when (this) {
 
 @Composable
 private fun PdfPane(
-    renderer: PdfRenderer,
+    renderCoordinator: PdfRenderCoordinator,
     firstPage: Int,
     pagesPerPane: Int,
     pageCount: Int,
@@ -917,7 +960,7 @@ private fun PdfPane(
         contentAlignment = Alignment.Center,
     ) {
         RenderedPdfSpread(
-            renderer = renderer,
+            renderCoordinator = renderCoordinator,
             firstPage = firstPage,
             pagesPerPane = pagesPerPane,
             pageCount = pageCount,
@@ -928,7 +971,7 @@ private fun PdfPane(
 
 @Composable
 private fun RenderedPdfSpread(
-    renderer: PdfRenderer,
+    renderCoordinator: PdfRenderCoordinator,
     firstPage: Int,
     pagesPerPane: Int,
     pageCount: Int,
@@ -938,53 +981,21 @@ private fun RenderedPdfSpread(
     val lastPage = (firstPage + pagesPerPane - 1).coerceAtMost(pageCount - 1)
     val bitmap by produceState<Bitmap?>(
         initialValue = null,
-        renderer,
+        renderCoordinator,
         firstPage,
         pagesPerPane,
         pageCount,
         paperModeEnabled,
     ) {
-        value = withContext(Dispatchers.IO) {
-            synchronized(renderer) {
-                val pageBitmaps = (firstPage..lastPage).map { pageIndex ->
-                    renderer.openPage(pageIndex).use { page ->
-                        val renderScale = (1600f / page.width).coerceAtMost(2f)
-                        val width = (page.width * renderScale).toInt().coerceAtLeast(1)
-                        val height = (page.height * renderScale).toInt().coerceAtLeast(1)
-                        createBitmap(width, height, Bitmap.Config.ARGB_8888).also { output ->
-                            output.eraseColor(
-                                if (paperModeEnabled) PAPER_COLOR else Color.WHITE,
-                            )
-                            page.render(
-                                output,
-                                null,
-                                null,
-                                PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY,
-                            )
-                            if (paperModeEnabled) applyPaperMode(output)
-                        }
-                    }
-                }
-                val slotWidth = pageBitmaps.maxOf { it.width }
-                val spreadHeight = pageBitmaps.maxOf { it.height }
-                createBitmap(
-                    slotWidth * pagesPerPane,
-                    spreadHeight,
-                    Bitmap.Config.ARGB_8888,
-                ).also { spread ->
-                    spread.eraseColor(if (paperModeEnabled) PAPER_COLOR else Color.WHITE)
-                    val canvas = AndroidCanvas(spread)
-                    pageBitmaps.forEachIndexed { slot, page ->
-                        canvas.drawBitmap(
-                            page,
-                            slot * slotWidth + (slotWidth - page.width) / 2f,
-                            (spreadHeight - page.height) / 2f,
-                            null,
-                        )
-                        page.recycle()
-                    }
-                }
-            }
+        value = renderCoordinator.render { renderer, requestContext ->
+            renderPdfPaneBitmap(
+                renderer = renderer,
+                firstPage = firstPage,
+                lastPage = lastPage,
+                pagesPerPane = pagesPerPane,
+                paperModeEnabled = paperModeEnabled,
+                requestContext = requestContext,
+            )
         }
     }
     val rendered = bitmap
@@ -1008,6 +1019,116 @@ private fun RenderedPdfSpread(
         DisposableEffect(rendered) {
             onDispose { rendered.recycle() }
         }
+    }
+}
+
+internal data class PdfBitmapSize(val width: Int, val height: Int)
+
+internal fun pdfBitmapSize(
+    pageWidth: Int,
+    pageHeight: Int,
+    targetWidth: Int? = null,
+): PdfBitmapSize {
+    val safePageWidth = pageWidth.coerceAtLeast(1)
+    val safePageHeight = pageHeight.coerceAtLeast(1)
+    if (targetWidth != null) {
+        val width = targetWidth.coerceAtLeast(1)
+        return PdfBitmapSize(
+            width = width,
+            height = (safePageHeight * (width.toFloat() / safePageWidth))
+                .roundToInt()
+                .coerceAtLeast(1),
+        )
+    }
+
+    val renderScale = (1600f / safePageWidth).coerceAtMost(2f)
+    return PdfBitmapSize(
+        width = (safePageWidth * renderScale).toInt().coerceAtLeast(1),
+        height = (safePageHeight * renderScale).toInt().coerceAtLeast(1),
+    )
+}
+
+private fun renderPdfPageBitmap(
+    renderer: PdfRenderer,
+    pageIndex: Int,
+    targetWidth: Int?,
+    paperModeEnabled: Boolean,
+    requestContext: CoroutineContext,
+): Bitmap = renderer.openPage(pageIndex).use { page ->
+    val size = pdfBitmapSize(page.width, page.height, targetWidth)
+    val output = createBitmap(size.width, size.height, Bitmap.Config.ARGB_8888)
+    try {
+        output.eraseColor(if (paperModeEnabled) PAPER_COLOR else Color.WHITE)
+        page.render(output, null, null, PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY)
+        requestContext.ensureActive()
+        if (paperModeEnabled) applyPaperMode(output)
+        requestContext.ensureActive()
+        output
+    } catch (failure: Throwable) {
+        output.recycle()
+        throw failure
+    }
+}
+
+private fun renderPdfPaneBitmap(
+    renderer: PdfRenderer,
+    firstPage: Int,
+    lastPage: Int,
+    pagesPerPane: Int,
+    paperModeEnabled: Boolean,
+    requestContext: CoroutineContext,
+): Bitmap {
+    if (pagesPerPane == 1) {
+        return renderPdfPageBitmap(
+            renderer = renderer,
+            pageIndex = firstPage,
+            targetWidth = null,
+            paperModeEnabled = paperModeEnabled,
+            requestContext = requestContext,
+        )
+    }
+
+    val pageSizes = (firstPage..lastPage).map { pageIndex ->
+        requestContext.ensureActive()
+        renderer.openPage(pageIndex).use { page ->
+            pageIndex to pdfBitmapSize(page.width, page.height)
+        }
+    }
+    val slotWidth = pageSizes.maxOf { it.second.width }
+    val spreadHeight = pageSizes.maxOf { it.second.height }
+    val spread = createBitmap(
+        slotWidth * pagesPerPane,
+        spreadHeight,
+        Bitmap.Config.ARGB_8888,
+    )
+    try {
+        spread.eraseColor(if (paperModeEnabled) PAPER_COLOR else Color.WHITE)
+        pageSizes.forEachIndexed { slot, (pageIndex, pageSize) ->
+            requestContext.ensureActive()
+            val left = slot * slotWidth + (slotWidth - pageSize.width) / 2
+            val top = (spreadHeight - pageSize.height) / 2
+            val destination = Rect(
+                left,
+                top,
+                left + pageSize.width,
+                top + pageSize.height,
+            )
+            renderer.openPage(pageIndex).use { page ->
+                page.render(
+                    spread,
+                    destination,
+                    null,
+                    PdfRenderer.Page.RENDER_MODE_FOR_DISPLAY,
+                )
+            }
+        }
+        requestContext.ensureActive()
+        if (paperModeEnabled) applyPaperMode(spread)
+        requestContext.ensureActive()
+        return spread
+    } catch (failure: Throwable) {
+        spread.recycle()
+        throw failure
     }
 }
 
