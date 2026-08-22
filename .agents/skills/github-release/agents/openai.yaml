@@ -1,0 +1,4 @@
+interface:
+  display_name: "GitHub Release"
+  short_description: "Create a tagged GitHub release with generated notes"
+  default_prompt: "Use $github-release to publish a new GitHub release for this project."
